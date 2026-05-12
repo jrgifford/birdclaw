@@ -7,7 +7,7 @@ description: "Sync likes, bookmarks, home timeline, and mention threads into loc
 
 `birdclaw sync` mirrors the live Twitter surfaces you actually use into the local SQLite store. Every sync command:
 
-- pulls from `xurl` first (or `bird` when forced via `--mode bird`)
+- pulls from the best live transport for the surface; follow graph sync prefers `bird`, while likes/bookmarks still try `xurl` before `bird`
 - writes into the same canonical tables that archive import uses
 - refreshes the FTS5 index incrementally
 - saves cursors so the next run resumes where the last one stopped
@@ -17,7 +17,7 @@ description: "Sync likes, bookmarks, home timeline, and mention threads into loc
 
 All `sync *` commands accept:
 
-- `--mode auto|xurl|bird` — transport selection; `auto` tries `xurl` then falls back to `bird`
+- `--mode auto|xurl|bird` — transport selection; `auto` chooses the preferred transport for that command and falls back when possible
 - `--limit <n>` — page size in `xurl` mode, total in single-page modes
 - `--all` — keep paginating until the retrievable window is exhausted
 - `--max-pages <n>` — cap a paged scan; implies `--all`
@@ -86,7 +86,7 @@ birdclaw sync followers --yes --json
 birdclaw sync following --yes --json
 ```
 
-The first two commands are dry runs. Live xurl fetches require `--yes`; pass `--refresh` only when you intentionally want to bypass the 24-hour follow-graph cache.
+The first two commands are dry runs. Live fetches require `--yes`; pass `--refresh` only when you intentionally want to bypass the 24-hour follow-graph cache. `auto` prefers `bird` for followers/following because the browser-cookie GraphQL path works when OAuth2 follow reads are unavailable.
 
 After the first run, `birdclaw graph events` shows the diff log and `birdclaw graph mutuals` lists current mutuals.
 

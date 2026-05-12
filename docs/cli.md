@@ -225,7 +225,7 @@ Default:
 - `sync likes` and `sync bookmarks` use cached live transport; `auto` tries `xurl`, then `bird`
 - `sync timeline` stores the live home timeline through `bird`; it defaults to the chronological Following feed
 - `sync mention-threads` fetches conversation context for recent mentions through `bird thread`; use `--delay-ms` and `--timeout-ms` to stay gentle on live X
-- `sync followers` and `sync following` default to dry-run and require `--yes` for live xurl sync or fresh-cache merge
+- `sync followers` and `sync following` default to dry-run and require `--yes` for live sync or fresh-cache merge; `auto` prefers `bird`, then falls back to `xurl`
 
 Common flags:
 
@@ -256,11 +256,12 @@ birdclaw sync followers --json
 birdclaw sync following --json
 birdclaw sync followers --yes --json
 birdclaw sync following --yes --json
+birdclaw sync followers --mode bird --yes --json
 birdclaw sync followers --yes --max-pages 1 --allow-partial --json
 birdclaw sync followers --yes --refresh --json
 ```
 
-Follow graph sync uses a 24-hour cache by default. Repeating the same sync command with `--yes` reuses fresh cache unless `--refresh` is passed, which prevents duplicate X reads during agent workflows.
+Follow graph sync uses a 24-hour cache by default. Repeating the same sync command with `--yes` reuses fresh cache unless `--refresh` is passed, which prevents duplicate live reads during agent workflows.
 
 `--allow-partial` acknowledges capped/incomplete snapshots and suppresses the warning. Incomplete snapshots are still recorded for audit, but they are not used for churn events.
 

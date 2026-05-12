@@ -23,7 +23,7 @@ Status: WIP. Real and usable. Not done. Expect schema churn, transport gaps, and
 - archive import for tweets, likes, profiles, and full DMs
 - archive import for bookmark exports when present
 - live likes and bookmarks sync through `xurl` or `bird`
-- cache-first followers/following sync through `xurl`
+- cache-first followers/following sync through `bird` or `xurl`
 - local follow graph queries for top followers, unfollows, mutuals, and non-mutual following
 - Git-friendly text backups with yearly tweet shards and per-conversation DM shards
 - profile hydration from live Twitter metadata
@@ -209,7 +209,7 @@ pnpm cli search tweets --bookmarked --limit 20 --json
 
 ### Sync likes, bookmarks, and home timeline
 
-`auto` tries `xurl` first, then falls back to `bird`. Use `bird` directly when the API path is unavailable for the account/token you have locally.
+`auto` tries `xurl` first for likes/bookmarks, then falls back to `bird`. Use `bird` directly when the API path is unavailable for the account/token you have locally.
 
 ```bash
 pnpm cli sync likes --mode auto --limit 100 --refresh --json
@@ -221,13 +221,14 @@ pnpm cli sync mention-threads --limit 30 --delay-ms 1500 --timeout-ms 15000 --js
 
 ### Follow graph queries
 
-Follow graph sync is cache-first and defaults to dry-run so repeated agent queries do not keep spending X API reads.
+Follow graph sync is cache-first and defaults to dry-run so repeated agent queries do not keep spending live reads. `auto` prefers `bird` for this path and falls back to `xurl`.
 
 ```bash
 pnpm cli sync followers --json
 pnpm cli sync following --json
 pnpm cli sync followers --yes --json
 pnpm cli sync following --yes --json
+pnpm cli sync followers --mode bird --yes --json
 pnpm cli graph summary --json
 pnpm cli graph events --since 2026-05-01 --json
 pnpm cli graph top-followers --limit 20 --json
@@ -236,7 +237,7 @@ pnpm cli graph non-mutual-following --sort followers --limit 100 --json
 pnpm cli graph mutuals --json
 ```
 
-Use `--refresh` only when you intentionally want a new live X fetch. The `graph` commands are local SQLite reads and never call X. See [follow-graph.md](docs/follow-graph.md) for long-term agent usage notes.
+Use `--refresh` only when you intentionally want a new live fetch. The `graph` commands are local SQLite reads and never call X. See [follow-graph.md](docs/follow-graph.md) for long-term agent usage notes.
 
 ### Export mentions for agents
 

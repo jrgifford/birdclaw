@@ -852,6 +852,8 @@ describe("cli", () => {
 			"following",
 			"--account",
 			"acct_studio",
+			"--mode",
+			"bird",
 			"--limit",
 			"50",
 			"--max-pages",
@@ -914,6 +916,7 @@ describe("cli", () => {
 		expect(syncFollowGraphMock).toHaveBeenNthCalledWith(1, {
 			direction: "followers",
 			account: undefined,
+			mode: "auto",
 			limit: 1000,
 			maxPages: undefined,
 			maxResources: undefined,
@@ -925,6 +928,7 @@ describe("cli", () => {
 		expect(syncFollowGraphMock).toHaveBeenNthCalledWith(2, {
 			direction: "following",
 			account: "acct_studio",
+			mode: "bird",
 			limit: 50,
 			maxPages: 2,
 			maxResources: 75,
@@ -993,6 +997,32 @@ describe("cli", () => {
 					ok: false,
 					direction: "followers",
 					error: "xurl followers failed: Unauthorized",
+				},
+				null,
+				2,
+			),
+		);
+		expect(process.exitCode).toBe(1);
+		expect(maybeAutoSyncBackupMock).not.toHaveBeenCalled();
+	});
+
+	it("rejects invalid follow sync modes as json", async () => {
+		syncFollowGraphMock.mockRejectedValueOnce(
+			new Error("--mode must be auto, bird, or xurl"),
+		);
+		const { runCli } = await loadCli();
+
+		await runCli(["node", "birdclaw", "sync", "followers", "--mode", "weird"]);
+
+		expect(syncFollowGraphMock).toHaveBeenCalledWith(
+			expect.objectContaining({ mode: "weird" }),
+		);
+		expect(consoleLogMock).toHaveBeenCalledWith(
+			JSON.stringify(
+				{
+					ok: false,
+					direction: "followers",
+					error: "--mode must be auto, bird, or xurl",
 				},
 				null,
 				2,

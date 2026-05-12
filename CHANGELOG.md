@@ -11,6 +11,7 @@
 ### Fixed
 
 - Include expanded short URLs and link occurrences in Git-friendly backups so linked-tweet search survives backup restore.
+- Prefer `bird` for follow graph sync in `auto` mode, keeping `xurl` as an explicit fallback for accounts where OAuth2 follow reads work.
 - Update the docs site and app icons to use the Birdclaw crab-bird mark instead of the generic bird logo.
 
 ## 0.4.1 - 2026-05-11

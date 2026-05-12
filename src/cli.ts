@@ -734,6 +734,7 @@ for (const direction of ["followers", "following"] as const) {
 			`Dry-run or refresh live ${direction} into the local follow graph`,
 		)
 		.option("--account <accountId>", "Account id")
+		.option("--mode <mode>", "auto, bird, or xurl", "auto")
 		.option("--limit <n>", "X API users per page", "1000")
 		.option("--max-pages <n>", "Stop after N pages")
 		.option("--max-resources <n>", "Stop after N unique users")
@@ -746,6 +747,7 @@ for (const direction of ["followers", "following"] as const) {
 				const result = await syncFollowGraph({
 					direction,
 					account: options.account,
+					mode: options.mode,
 					limit: Number(options.limit),
 					maxPages: options.maxPages ? Number(options.maxPages) : undefined,
 					maxResources: options.maxResources

@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { getBirdCommand } from "./config";
 import type {
 	XurlMentionData,
+	XurlFollowUsersResponse,
 	XurlMentionsResponse,
 	XurlMentionUser,
 	XurlReferencedTweet,
@@ -97,6 +98,13 @@ interface BirdProfilesPayload {
 	users?: NonNullable<BirdUserOverviewPayload["user"]>[];
 	errors?: Array<{ target?: string; error?: string }>;
 }
+
+type BirdFollowUsersPayload =
+	| NonNullable<BirdUserOverviewPayload["user"]>[]
+	| {
+			users?: NonNullable<BirdUserOverviewPayload["user"]>[];
+			nextCursor?: string | null;
+	  };
 
 function toIsoTimestamp(value: string) {
 	const parsed = new Date(value);
@@ -433,6 +441,65 @@ export async function listHomeTimelineViaBird({
 	const payload = parseBirdJson(stdout);
 
 	return normalizeBirdTweets(getBirdTweetItems(payload, "home"));
+}
+
+function normalizeBirdFollowUsers(
+	payload: unknown,
+	command: "followers" | "following",
+	maxResults: number,
+): XurlFollowUsersResponse {
+	const rawPayload = payload as BirdFollowUsersPayload;
+	const users = Array.isArray(rawPayload) ? rawPayload : rawPayload.users;
+	if (!Array.isArray(users)) {
+		throw new Error(`bird ${command} returned unexpected JSON`);
+	}
+
+	const data = users
+		.map(toXurlMentionUser)
+		.filter((user): user is XurlMentionUser => Boolean(user));
+	const nextToken =
+		!Array.isArray(rawPayload) && typeof rawPayload.nextCursor === "string"
+			? rawPayload.nextCursor
+			: null;
+
+	return {
+		data,
+		meta: {
+			result_count: data.length,
+			page_count:
+				data.length > 0 ? Math.max(1, Math.ceil(data.length / maxResults)) : 1,
+			next_token: nextToken,
+		},
+	};
+}
+
+export async function listFollowUsersViaBird({
+	direction,
+	userId,
+	maxResults,
+	all,
+	maxPages,
+}: {
+	direction: "followers" | "following";
+	userId?: string;
+	maxResults: number;
+	all?: boolean;
+	maxPages?: number;
+}): Promise<XurlFollowUsersResponse> {
+	const args = [direction, "-n", String(maxResults), "--json"];
+	if (userId) {
+		args.push("--user", userId);
+	}
+	if (all) {
+		args.push("--all");
+	}
+	if (maxPages !== undefined) {
+		args.push("--max-pages", String(maxPages));
+	}
+	const stdout = await runBirdJsonCommand(args);
+	const payload = parseBirdJson(stdout);
+
+	return normalizeBirdFollowUsers(payload, direction, maxResults);
 }
 
 export async function listThreadViaBird({

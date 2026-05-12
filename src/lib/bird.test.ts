@@ -354,6 +354,99 @@ describe("bird transport wrapper", () => {
 		expectBirdCommandCall(1, ["home", "-n", "9", "--json", "--following"]);
 	});
 
+	it("maps bird follower lists into xurl-compatible users", async () => {
+		process.env.BIRDCLAW_BIRD_COMMAND = "/tmp/bird";
+		mockBirdStdoutOnce(
+			JSON.stringify({
+				users: [
+					{
+						id: "42",
+						username: "sam",
+						name: "Sam",
+						description: "Working on systems",
+						followersCount: 123,
+						followingCount: 45,
+						profileImageUrl:
+							"https://pbs.twimg.com/profile_images/42/avatar_normal.jpg",
+						createdAt: "Mon Jan 01 00:00:00 +0000 2024",
+					},
+				],
+				nextCursor: "cursor-two",
+			}),
+		);
+		mockBirdStdoutOnce(
+			JSON.stringify([
+				{
+					id: "43",
+					username: "amelia",
+					name: "Amelia",
+					followersCount: 7,
+				},
+			]),
+		);
+		const { listFollowUsersViaBird } = await import("./bird");
+
+		await expect(
+			listFollowUsersViaBird({
+				direction: "followers",
+				userId: "25401953",
+				maxResults: 100,
+				all: true,
+				maxPages: 2,
+			}),
+		).resolves.toEqual({
+			data: [
+				expect.objectContaining({
+					id: "42",
+					username: "sam",
+					public_metrics: {
+						followers_count: 123,
+						following_count: 45,
+					},
+				}),
+			],
+			meta: {
+				result_count: 1,
+				page_count: 1,
+				next_token: "cursor-two",
+			},
+		});
+		await expect(
+			listFollowUsersViaBird({
+				direction: "following",
+				maxResults: 10,
+			}),
+		).resolves.toEqual({
+			data: [
+				expect.objectContaining({
+					id: "43",
+					username: "amelia",
+					public_metrics: {
+						followers_count: 7,
+						following_count: 0,
+					},
+				}),
+			],
+			meta: {
+				result_count: 1,
+				page_count: 1,
+				next_token: null,
+			},
+		});
+		expectBirdCommandCall(1, [
+			"followers",
+			"-n",
+			"100",
+			"--json",
+			"--user",
+			"25401953",
+			"--all",
+			"--max-pages",
+			"2",
+		]);
+		expectBirdCommandCall(2, ["following", "-n", "10", "--json"]);
+	});
+
 	it("maps bird thread json with reply references", async () => {
 		process.env.BIRDCLAW_BIRD_COMMAND = "/tmp/bird";
 		mockBirdStdoutOnce(

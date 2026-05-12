@@ -7,6 +7,7 @@ Birdclaw keeps followers/following in local SQLite and makes graph queries cache
 - `birdclaw graph *` commands never call X.
 - `birdclaw sync followers` and `birdclaw sync following` default to dry-run.
 - Live sync requires `--yes`.
+- `--mode auto` prefers `bird` and falls back to `xurl`; use `--mode xurl` only when the OAuth2 follow endpoints work for the account.
 - Fresh sync cache is reused unless `--refresh` is passed.
 - The default follow-graph cache TTL is 24 hours.
 - Capped syncs are recorded as incomplete snapshots and are not used for churn events.
@@ -30,7 +31,7 @@ birdclaw sync followers --json
 birdclaw sync following --json
 ```
 
-Dry-run output reports the cache key, whether a fresh cache exists, the page size, caps, and whether a live X request would be needed.
+Dry-run output reports the cache key, whether a fresh cache exists, the page size, caps, and whether a live request would be needed.
 
 ## Refresh Followers And Following
 
@@ -39,6 +40,13 @@ Full refresh:
 ```bash
 birdclaw sync followers --yes --json
 birdclaw sync following --yes --json
+```
+
+Force a transport only when debugging:
+
+```bash
+birdclaw sync followers --mode bird --yes --json
+birdclaw sync followers --mode xurl --yes --json
 ```
 
 Capped refresh for cheaper inspection:

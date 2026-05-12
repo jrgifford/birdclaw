@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { getNativeDb } from "./db";
+import { listFollowUsersViaBird } from "./bird";
 import type { Database } from "./sqlite";
 import { readSyncCache, writeSyncCache } from "./sync-cache";
 import type {
@@ -19,10 +20,12 @@ const DEFAULT_FOLLOW_CACHE_TTL_MS = 24 * 60 * 60_000;
 const DEFAULT_FOLLOW_PAGE_LIMIT = 1000;
 const MIN_FOLLOW_PAGE_LIMIT = 1;
 const MAX_FOLLOW_PAGE_LIMIT = 1000;
+const BIRD_FOLLOW_PAGE_LIMIT = 100;
 
 export interface SyncFollowGraphOptions {
 	direction: FollowDirection;
 	account?: string;
+	mode?: FollowGraphSyncMode;
 	limit?: number;
 	maxPages?: number;
 	maxResources?: number;
@@ -31,6 +34,9 @@ export interface SyncFollowGraphOptions {
 	allowPartial?: boolean;
 	cacheTtlMs?: number;
 }
+
+type FollowGraphSyncMode = "auto" | "bird" | "xurl";
+type FollowGraphLiveSource = "bird" | "xurl";
 
 interface ResolvedAccount {
 	accountId: string;
@@ -125,12 +131,14 @@ function resolveAccount(db: Database, accountId?: string): ResolvedAccount {
 function buildCacheKey({
 	direction,
 	accountId,
+	mode,
 	limit,
 	maxPages,
 	maxResources,
 }: {
 	direction: FollowDirection;
 	accountId: string;
+	mode: FollowGraphSyncMode;
 	limit: number;
 	maxPages?: number;
 	maxResources?: number;
@@ -139,6 +147,7 @@ function buildCacheKey({
 		"follow-graph",
 		direction,
 		accountId,
+		`mode:${mode}`,
 		`limit:${String(limit)}`,
 		`pages:${maxPages === undefined ? "all" : String(maxPages)}`,
 		`resources:${maxResources === undefined ? "all" : String(maxResources)}`,
@@ -209,17 +218,22 @@ function mergePages(
 	}
 
 	const lastPage = pages.at(-1);
+	const payloadPageCount = Number(lastPage?.meta?.page_count);
+	const pageCount =
+		Number.isFinite(payloadPageCount) && payloadPageCount > pages.length
+			? payloadPageCount
+			: pages.length;
 	return {
 		data: users,
 		meta: {
 			...lastPage?.meta,
 			result_count: users.length,
-			page_count: pages.length,
+			page_count: pageCount,
 			next_token: nextToken ?? null,
 			truncated_by_max_resources: truncatedByMaxResources,
 		},
 		complete: !nextToken && !truncatedByMaxResources,
-		pageCount: pages.length,
+		pageCount,
 		truncatedByMaxResources,
 	};
 }
@@ -268,6 +282,120 @@ async function fetchFollowGraphViaXurl({
 	return mergePages(pages, nextToken, maxResources);
 }
 
+async function fetchFollowGraphViaBird({
+	direction,
+	userId,
+	limit,
+	maxPages,
+	maxResources,
+}: {
+	direction: FollowDirection;
+	userId?: string;
+	limit: number;
+	maxPages?: number;
+	maxResources?: number;
+}): Promise<MergedFollowPayload> {
+	const birdLimit = Math.min(limit, BIRD_FOLLOW_PAGE_LIMIT);
+	const cappedMaxPages =
+		maxResources === undefined
+			? maxPages
+			: Math.min(
+					maxPages ?? Number.POSITIVE_INFINITY,
+					Math.ceil(maxResources / birdLimit),
+				);
+	const payload = await listFollowUsersViaBird({
+		direction,
+		userId,
+		maxResults: Math.min(birdLimit, maxResources ?? birdLimit),
+		all: true,
+		maxPages: Number.isFinite(cappedMaxPages) ? cappedMaxPages : undefined,
+	});
+	return mergePages(
+		[payload],
+		typeof payload.meta?.next_token === "string"
+			? String(payload.meta.next_token)
+			: undefined,
+		maxResources,
+	);
+}
+
+async function fetchFollowGraph({
+	mode,
+	direction,
+	username,
+	userId,
+	limit,
+	maxPages,
+	maxResources,
+}: {
+	mode: FollowGraphSyncMode;
+	direction: FollowDirection;
+	username: string;
+	userId?: string;
+	limit: number;
+	maxPages?: number;
+	maxResources?: number;
+}): Promise<{ source: FollowGraphLiveSource; payload: MergedFollowPayload }> {
+	if (mode === "bird") {
+		return {
+			source: "bird",
+			payload: await fetchFollowGraphViaBird({
+				direction,
+				userId,
+				limit,
+				maxPages,
+				maxResources,
+			}),
+		};
+	}
+	if (mode === "xurl") {
+		return {
+			source: "xurl",
+			payload: await fetchFollowGraphViaXurl({
+				direction,
+				username,
+				userId,
+				limit,
+				maxPages,
+				maxResources,
+			}),
+		};
+	}
+
+	try {
+		return {
+			source: "bird",
+			payload: await fetchFollowGraphViaBird({
+				direction,
+				userId,
+				limit,
+				maxPages,
+				maxResources,
+			}),
+		};
+	} catch (birdError) {
+		try {
+			return {
+				source: "xurl",
+				payload: await fetchFollowGraphViaXurl({
+					direction,
+					username,
+					userId,
+					limit,
+					maxPages,
+					maxResources,
+				}),
+			};
+		} catch (xurlError) {
+			throw new Error(
+				`follow graph sync failed via bird and xurl: bird: ${errorMessage(
+					birdError,
+				)}; xurl: ${errorMessage(xurlError)}`,
+			);
+		}
+	}
+}
+
 function getExistingEdges(
 	db: Database,
 	accountId: string,
@@ -300,7 +428,7 @@ function mergeFollowPayloadIntoLocalStore({
 	accountId: string;
 	direction: FollowDirection;
 	payload: MergedFollowPayload;
-	source: "xurl" | "cache";
+	source: FollowGraphLiveSource | "cache";
 }) {
 	const now = new Date().toISOString();
 	const snapshotId = `follow_snapshot_${randomUUID()}`;
@@ -428,6 +556,7 @@ function makeDryRunResponse({
 	db,
 	account,
 	direction,
+	mode,
 	limit,
 	maxPages,
 	maxResources,
@@ -437,6 +566,7 @@ function makeDryRunResponse({
 	db: Database;
 	account: ResolvedAccount;
 	direction: FollowDirection;
+	mode: FollowGraphSyncMode;
 	limit: number;
 	maxPages?: number;
 	maxResources?: number;
@@ -447,12 +577,15 @@ function makeDryRunResponse({
 	const cacheAgeMs = cached
 		? Date.now() - new Date(cached.updatedAt).getTime()
 		: Number.POSITIVE_INFINITY;
+	const wouldCallLive = !cached || cacheAgeMs > cacheTtlMs;
 	return {
 		ok: true,
 		dryRun: true,
 		direction,
 		accountId: account.accountId,
-		wouldCallX: !cached || cacheAgeMs > cacheTtlMs,
+		mode,
+		wouldCallLive,
+		wouldCallX: mode === "bird" ? false : wouldCallLive,
 		requiredFlag: "--yes",
 		estimate: {
 			maxResultsPerPage: limit,
@@ -472,12 +605,24 @@ function makeDryRunResponse({
 		},
 		currentCount: readCurrentCount(db, account.accountId, direction),
 		message:
-			"Dry run only. Pass --yes to use a fresh cache or perform live xurl sync.",
+			"Dry run only. Pass --yes to use a fresh cache or perform live follow graph sync.",
 	};
+}
+
+function parseMode(value?: FollowGraphSyncMode) {
+	if (!value || value === "auto" || value === "bird" || value === "xurl") {
+		return value ?? "auto";
+	}
+	throw new Error("--mode must be auto, bird, or xurl");
+}
+
+function errorMessage(error: unknown) {
+	return error instanceof Error ? error.message : String(error);
 }
 
 export async function syncFollowGraph(options: SyncFollowGraphOptions) {
 	const db = getNativeDb();
+	const mode = parseMode(options.mode);
 	const limit = parseLimit(options.limit);
 	const maxPages = parseOptionalPositiveInteger(
 		"--max-pages",
@@ -492,6 +637,7 @@ export async function syncFollowGraph(options: SyncFollowGraphOptions) {
 	const cacheKey = buildCacheKey({
 		direction: options.direction,
 		accountId: account.accountId,
+		mode,
 		limit,
 		maxPages,
 		maxResources,
@@ -502,6 +648,7 @@ export async function syncFollowGraph(options: SyncFollowGraphOptions) {
 			db,
 			account,
 			direction: options.direction,
+			mode,
 			limit,
 			maxPages,
 			maxResources,
@@ -518,9 +665,10 @@ export async function syncFollowGraph(options: SyncFollowGraphOptions) {
 		!options.refresh && cached && cacheAgeMs <= cacheTtlMs,
 	);
 
-	const payload = useCache
-		? cached!.value
-		: await fetchFollowGraphViaXurl({
+	const liveResult = useCache
+		? undefined
+		: await fetchFollowGraph({
+				mode,
 				direction: options.direction,
 				username: account.username,
 				userId: account.externalUserId,
@@ -528,6 +676,7 @@ export async function syncFollowGraph(options: SyncFollowGraphOptions) {
 				maxPages,
 				maxResources,
 			});
+	const payload = useCache ? cached!.value : liveResult!.payload;
 
 	if (!useCache) {
 		writeSyncCache(cacheKey, payload, db);
@@ -538,13 +687,14 @@ export async function syncFollowGraph(options: SyncFollowGraphOptions) {
 		accountId: account.accountId,
 		direction: options.direction,
 		payload,
-		source: useCache ? "cache" : "xurl",
+		source: useCache ? "cache" : liveResult!.source,
 	});
 
 	return {
 		ok: true,
 		dryRun: false,
-		source: useCache ? "cache" : "xurl",
+		source: useCache ? "cache" : liveResult!.source,
+		mode,
 		direction: options.direction,
 		accountId: account.accountId,
 		status: mergeResult.status,

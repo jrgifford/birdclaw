@@ -8,7 +8,12 @@ import { getNativeDb, resetDatabaseForTests } from "./db";
 import type { XurlMentionUser } from "./types";
 
 const mocks = vi.hoisted(() => ({
+	listFollowUsersViaBird: vi.fn(),
 	listFollowUsersViaXurl: vi.fn(),
+}));
+
+vi.mock("./bird", () => ({
+	listFollowUsersViaBird: mocks.listFollowUsersViaBird,
 }));
 
 vi.mock("./xurl", () => ({
@@ -23,6 +28,7 @@ function setupTempHome() {
 	process.env.BIRDCLAW_HOME = tempRoot;
 	resetBirdclawPathsForTests();
 	resetDatabaseForTests();
+	mocks.listFollowUsersViaBird.mockRejectedValue(new Error("bird unavailable"));
 }
 
 function user(
@@ -48,6 +54,7 @@ afterEach(() => {
 	resetDatabaseForTests();
 	resetBirdclawPathsForTests();
 	delete process.env.BIRDCLAW_HOME;
+	mocks.listFollowUsersViaBird.mockReset();
 	mocks.listFollowUsersViaXurl.mockReset();
 	for (const tempRoot of tempRoots.splice(0)) {
 		rmSync(tempRoot, { recursive: true, force: true });
@@ -68,6 +75,8 @@ describe("follow graph sync and cache-only queries", () => {
 		expect(result).toMatchObject({
 			ok: true,
 			dryRun: true,
+			mode: "auto",
+			wouldCallLive: true,
 			wouldCallX: true,
 			requiredFlag: "--yes",
 		});
@@ -75,6 +84,39 @@ describe("follow graph sync and cache-only queries", () => {
 			estimate: {
 				cacheTtlSeconds: 1,
 			},
+		});
+		expect(mocks.listFollowUsersViaBird).not.toHaveBeenCalled();
+		expect(mocks.listFollowUsersViaXurl).not.toHaveBeenCalled();
+	});
+
+	it("prefers bird for live follow sync in auto mode", async () => {
+		setupTempHome();
+		mocks.listFollowUsersViaBird.mockReset();
+		mocks.listFollowUsersViaBird.mockResolvedValueOnce({
+			data: [user("1", "alice", 100)],
+			meta: { result_count: 1, page_count: 1, next_token: null },
+		});
+		const { syncFollowGraph } = await import("./follow-graph");
+
+		const result = await syncFollowGraph({
+			direction: "followers",
+			yes: true,
+			refresh: true,
+		});
+
+		expect(result).toMatchObject({
+			ok: true,
+			mode: "auto",
+			source: "bird",
+			status: "complete",
+			count: 1,
+		});
+		expect(mocks.listFollowUsersViaBird).toHaveBeenCalledWith({
+			direction: "followers",
+			userId: "25401953",
+			maxResults: 100,
+			all: true,
+			maxPages: undefined,
 		});
 		expect(mocks.listFollowUsersViaXurl).not.toHaveBeenCalled();
 	});
