@@ -117,9 +117,15 @@ export interface EmbeddedTweet {
 	id: string;
 	text: string;
 	createdAt: string;
+	replyToId?: string | null;
 	author: ProfileRecord;
 	entities: TweetEntities;
 	media: TweetMediaItem[];
+}
+
+export interface TweetConversationResponse {
+	anchorId: string;
+	items: EmbeddedTweet[];
 }
 
 export interface BlockItem {
@@ -149,6 +155,7 @@ export interface TimelineItem {
 	text: string;
 	searchSnippet?: string;
 	createdAt: string;
+	replyToId?: string | null;
 	isReplied: boolean;
 	likeCount: number;
 	mediaCount: number;

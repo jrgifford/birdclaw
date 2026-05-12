@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
 	Bookmark,
 	BookmarkCheck,
@@ -6,7 +7,7 @@ import {
 	Repeat2,
 } from "lucide-react";
 import { formatCompactNumber, formatShortTimestamp } from "#/lib/present";
-import type { TimelineItem } from "#/lib/types";
+import type { EmbeddedTweet, TimelineItem } from "#/lib/types";
 import {
 	cx,
 	embeddedCardClass,
@@ -27,6 +28,7 @@ import {
 	mutedDotClass,
 } from "#/lib/ui";
 import { AvatarChip } from "./AvatarChip";
+import { ConversationThread } from "./ConversationThread";
 import { EmbeddedTweetCard } from "./EmbeddedTweetCard";
 import { LinkPreviewCard } from "./LinkPreviewCard";
 import { ProfilePreview } from "./ProfilePreview";
@@ -41,6 +43,13 @@ function getVisibleUrlCards(item: TimelineItem) {
 	});
 }
 
+function isInteractiveTarget(target: EventTarget | null) {
+	return (
+		target instanceof Element &&
+		Boolean(target.closest("a,button,input,textarea,select,[role='button']"))
+	);
+}
+
 export function TimelineCard({
 	item,
 	onReply,
@@ -52,9 +61,58 @@ export function TimelineCard({
 }) {
 	const canReply =
 		showReplyControls && item.kind !== "like" && item.kind !== "bookmark";
+	const [conversationOpen, setConversationOpen] = useState(false);
+	const [conversationLoading, setConversationLoading] = useState(false);
+	const [conversationError, setConversationError] = useState<string | null>(
+		null,
+	);
+	const [conversationItems, setConversationItems] = useState<EmbeddedTweet[]>(
+		[],
+	);
+
+	async function loadConversation() {
+		if (conversationLoading || conversationItems.length > 0) return;
+		setConversationLoading(true);
+		setConversationError(null);
+		try {
+			const response = await fetch(
+				`/api/conversation?tweetId=${encodeURIComponent(item.id)}`,
+			);
+			const data = (await response.json()) as {
+				ok?: boolean;
+				error?: string;
+				items?: EmbeddedTweet[];
+			};
+			if (!response.ok || data.ok === false) {
+				throw new Error(data.error ?? "Conversation unavailable");
+			}
+			setConversationItems((data.items ?? []).filter(Boolean));
+		} catch (error) {
+			setConversationError(
+				error instanceof Error ? error.message : "Conversation unavailable",
+			);
+		} finally {
+			setConversationLoading(false);
+		}
+	}
+
+	function toggleConversation() {
+		const nextOpen = !conversationOpen;
+		setConversationOpen(nextOpen);
+		if (nextOpen) {
+			void loadConversation();
+		}
+	}
 
 	return (
-		<article className={feedRowClass} data-perf="timeline-card">
+		<article
+			className={cx(feedRowClass, "cursor-pointer")}
+			data-perf="timeline-card"
+			onClick={(event) => {
+				if (isInteractiveTarget(event.target)) return;
+				toggleConversation();
+			}}
+		>
 			<AvatarChip
 				avatarUrl={item.author.avatarUrl}
 				hue={item.author.avatarHue}
@@ -110,10 +168,35 @@ export function TimelineCard({
 				))}
 				<footer className={feedRowActionsClass}>
 					<div className="flex items-center gap-3 text-[13px] text-[var(--ink-soft)]">
+						<button
+							aria-expanded={conversationOpen}
+							aria-label={
+								conversationOpen ? "Hide conversation" : "Show conversation"
+							}
+							className={feedActionButtonClass}
+							onClick={(event) => {
+								event.stopPropagation();
+								toggleConversation();
+							}}
+							type="button"
+						>
+							<span className={feedActionIconWrapClass}>
+								<MessageCircle
+									className={feedActionIconClass}
+									strokeWidth={1.7}
+								/>
+							</span>
+							<span className="text-[13px]">
+								{conversationOpen ? "Hide thread" : "Thread"}
+							</span>
+						</button>
 						{canReply ? (
 							<button
 								className={feedActionButtonClass}
-								onClick={() => onReply(item.id)}
+								onClick={(event) => {
+									event.stopPropagation();
+									onReply(item.id);
+								}}
 								type="button"
 								aria-label="Reply"
 							>
@@ -174,6 +257,14 @@ export function TimelineCard({
 						<span>{item.accountHandle}</span>
 					</div>
 				</footer>
+				{conversationOpen ? (
+					<ConversationThread
+						anchorId={item.id}
+						error={conversationError}
+						items={conversationItems}
+						loading={conversationLoading}
+					/>
+				) : null}
 			</div>
 		</article>
 	);

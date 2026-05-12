@@ -23,6 +23,7 @@ import { Route as ApiProfileHydrateRouteImport } from './routes/api/profile-hydr
 import { Route as ApiLinkPreviewRouteImport } from './routes/api/link-preview'
 import { Route as ApiLinkInsightsRouteImport } from './routes/api/link-insights'
 import { Route as ApiInboxRouteImport } from './routes/api/inbox'
+import { Route as ApiConversationRouteImport } from './routes/api/conversation'
 import { Route as ApiBlocksRouteImport } from './routes/api/blocks'
 import { Route as ApiAvatarRouteImport } from './routes/api/avatar'
 import { Route as ApiActionRouteImport } from './routes/api/action'
@@ -97,6 +98,11 @@ const ApiInboxRoute = ApiInboxRouteImport.update({
   path: '/api/inbox',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiConversationRoute = ApiConversationRouteImport.update({
+  id: '/api/conversation',
+  path: '/api/conversation',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiBlocksRoute = ApiBlocksRouteImport.update({
   id: '/api/blocks',
   path: '/api/blocks',
@@ -125,6 +131,7 @@ export interface FileRoutesByFullPath {
   '/api/action': typeof ApiActionRoute
   '/api/avatar': typeof ApiAvatarRoute
   '/api/blocks': typeof ApiBlocksRoute
+  '/api/conversation': typeof ApiConversationRoute
   '/api/inbox': typeof ApiInboxRoute
   '/api/link-insights': typeof ApiLinkInsightsRoute
   '/api/link-preview': typeof ApiLinkPreviewRoute
@@ -144,6 +151,7 @@ export interface FileRoutesByTo {
   '/api/action': typeof ApiActionRoute
   '/api/avatar': typeof ApiAvatarRoute
   '/api/blocks': typeof ApiBlocksRoute
+  '/api/conversation': typeof ApiConversationRoute
   '/api/inbox': typeof ApiInboxRoute
   '/api/link-insights': typeof ApiLinkInsightsRoute
   '/api/link-preview': typeof ApiLinkPreviewRoute
@@ -164,6 +172,7 @@ export interface FileRoutesById {
   '/api/action': typeof ApiActionRoute
   '/api/avatar': typeof ApiAvatarRoute
   '/api/blocks': typeof ApiBlocksRoute
+  '/api/conversation': typeof ApiConversationRoute
   '/api/inbox': typeof ApiInboxRoute
   '/api/link-insights': typeof ApiLinkInsightsRoute
   '/api/link-preview': typeof ApiLinkPreviewRoute
@@ -185,6 +194,7 @@ export interface FileRouteTypes {
     | '/api/action'
     | '/api/avatar'
     | '/api/blocks'
+    | '/api/conversation'
     | '/api/inbox'
     | '/api/link-insights'
     | '/api/link-preview'
@@ -204,6 +214,7 @@ export interface FileRouteTypes {
     | '/api/action'
     | '/api/avatar'
     | '/api/blocks'
+    | '/api/conversation'
     | '/api/inbox'
     | '/api/link-insights'
     | '/api/link-preview'
@@ -223,6 +234,7 @@ export interface FileRouteTypes {
     | '/api/action'
     | '/api/avatar'
     | '/api/blocks'
+    | '/api/conversation'
     | '/api/inbox'
     | '/api/link-insights'
     | '/api/link-preview'
@@ -243,6 +255,7 @@ export interface RootRouteChildren {
   ApiActionRoute: typeof ApiActionRoute
   ApiAvatarRoute: typeof ApiAvatarRoute
   ApiBlocksRoute: typeof ApiBlocksRoute
+  ApiConversationRoute: typeof ApiConversationRoute
   ApiInboxRoute: typeof ApiInboxRoute
   ApiLinkInsightsRoute: typeof ApiLinkInsightsRoute
   ApiLinkPreviewRoute: typeof ApiLinkPreviewRoute
@@ -351,6 +364,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiInboxRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/conversation': {
+      id: '/api/conversation'
+      path: '/api/conversation'
+      fullPath: '/api/conversation'
+      preLoaderRoute: typeof ApiConversationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/blocks': {
       id: '/api/blocks'
       path: '/api/blocks'
@@ -387,6 +407,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiActionRoute: ApiActionRoute,
   ApiAvatarRoute: ApiAvatarRoute,
   ApiBlocksRoute: ApiBlocksRoute,
+  ApiConversationRoute: ApiConversationRoute,
   ApiInboxRoute: ApiInboxRoute,
   ApiLinkInsightsRoute: ApiLinkInsightsRoute,
   ApiLinkPreviewRoute: ApiLinkPreviewRoute,

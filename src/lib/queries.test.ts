@@ -12,6 +12,7 @@ import {
 	createTweetReply,
 	getConversationThread,
 	getQueryEnvelope,
+	getTweetConversation,
 	listDmConversations,
 	listTimelineItems,
 	queryResource,
@@ -600,6 +601,100 @@ describe("birdclaw queries", () => {
 		expect(quotedItem?.quotedTweet?.id).toBe("tweet_001");
 		expect(quotedItem?.quotedTweet?.text).toContain("local-first");
 		expect(quotedItem?.author.avatarUrl).toMatch(/^data:image\/svg\+xml/);
+	});
+
+	it("returns an archived tweet conversation from the root", () => {
+		setupTempHome();
+		const db = getNativeDb();
+		const insertTweet = db.prepare(`
+      insert into tweets (
+        id, account_id, author_profile_id, kind, text, created_at,
+        is_replied, reply_to_id, like_count, media_count, bookmarked, liked,
+        entities_json, media_json, quoted_tweet_id
+      ) values (?, 'acct_primary', 'profile_me', 'home', ?, ?, 0, ?, 0, 0, 0, 0, '{}', '[]', null)
+    `);
+
+		insertTweet.run(
+			"conv_root",
+			"Root of the conversation",
+			"2026-03-10T10:00:00.000Z",
+			null,
+		);
+		insertTweet.run(
+			"conv_anchor",
+			"Clicked middle tweet",
+			"2026-03-10T10:01:00.000Z",
+			"conv_root",
+		);
+		insertTweet.run(
+			"conv_child",
+			"Reply after the clicked tweet",
+			"2026-03-10T10:02:00.000Z",
+			"conv_anchor",
+		);
+
+		const conversation = getTweetConversation("conv_anchor");
+
+		expect(conversation?.anchorId).toBe("conv_anchor");
+		expect(conversation?.items.map((tweet) => tweet.id)).toEqual([
+			"conv_root",
+			"conv_anchor",
+			"conv_child",
+		]);
+		expect(conversation?.items[1]?.replyToId).toBe("conv_root");
+	});
+
+	it("preserves the selected reply chain before broad thread context", () => {
+		setupTempHome();
+		const db = getNativeDb();
+		const insertTweet = db.prepare(`
+      insert into tweets (
+        id, account_id, author_profile_id, kind, text, created_at,
+        is_replied, reply_to_id, like_count, media_count, bookmarked, liked,
+        entities_json, media_json, quoted_tweet_id
+      ) values (?, 'acct_primary', 'profile_me', 'home', ?, ?, 0, ?, 0, 0, 0, 0, '{}', '[]', null)
+    `);
+
+		insertTweet.run("deep_root", "Root", "2026-03-10T10:00:00.000Z", null);
+		for (let index = 0; index < 20; index += 1) {
+			insertTweet.run(
+				`deep_sibling_${String(index).padStart(2, "0")}`,
+				`Popular sibling ${String(index)}`,
+				`2026-03-10T10:${String(index + 1).padStart(2, "0")}:00.000Z`,
+				"deep_root",
+			);
+		}
+
+		let parentId = "deep_root";
+		for (let depth = 1; depth <= 10; depth += 1) {
+			const tweetId = depth === 10 ? "deep_anchor" : `deep_parent_${depth}`;
+			insertTweet.run(
+				tweetId,
+				`Deep branch ${String(depth)}`,
+				`2026-03-10T11:${String(depth).padStart(2, "0")}:00.000Z`,
+				parentId,
+			);
+			parentId = tweetId;
+		}
+		insertTweet.run(
+			"deep_child",
+			"Focused child",
+			"2026-03-10T11:11:00.000Z",
+			"deep_anchor",
+		);
+
+		const conversation = getTweetConversation("deep_anchor", 12);
+		const ids = conversation?.items.map((tweet) => tweet.id) ?? [];
+
+		expect(ids).toContain("deep_root");
+		expect(ids).toContain("deep_parent_1");
+		expect(ids).toContain("deep_parent_9");
+		expect(ids).toContain("deep_anchor");
+		expect(ids).toContain("deep_child");
+		expect(ids.indexOf("deep_parent_9")).toBeLessThan(
+			ids.indexOf("deep_anchor"),
+		);
+		expect(ids.at(-1)).toBe("deep_child");
 	});
 
 	it("builds a mixed inbox with ranked mentions and dms", () => {

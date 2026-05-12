@@ -18,6 +18,7 @@ import type {
 	TimelineItem,
 	TimelineQuery,
 	TweetEntities,
+	TweetConversationResponse,
 	TweetMediaItem,
 	TweetUrlEntity,
 } from "./types";
@@ -205,6 +206,10 @@ function buildEmbeddedTweet(
 		id: String(row[`${prefix}id`]),
 		text,
 		createdAt: String(row[`${prefix}created_at`] ?? new Date(0).toISOString()),
+		replyToId:
+			typeof row[`${prefix}reply_to_id`] === "string"
+				? String(row[`${prefix}reply_to_id`])
+				: null,
 		author,
 		entities: enrichTimelineEntities(
 			db,
@@ -538,6 +543,7 @@ export function listTimelineItems({
         e.kind,
         t.text,
         t.created_at,
+        t.reply_to_id,
         t.is_replied,
         t.like_count,
         t.media_count,
@@ -580,6 +586,7 @@ export function listTimelineItems({
         rt.id as reply_id,
         rt.text as reply_text,
         rt.created_at as reply_created_at,
+        rt.reply_to_id as reply_reply_to_id,
         rt.entities_json as reply_entities_json,
         rt.media_json as reply_media_json,
         rp.id as reply_profile_id,
@@ -594,6 +601,7 @@ export function listTimelineItems({
         qt.id as quoted_id,
         qt.text as quoted_text,
         qt.created_at as quoted_created_at,
+        qt.reply_to_id as quoted_reply_to_id,
         qt.entities_json as quoted_entities_json,
         qt.media_json as quoted_media_json,
         qp.id as quoted_profile_id,
@@ -686,6 +694,8 @@ export function listTimelineItems({
 				? { searchSnippet: row.search_snippet }
 				: {}),
 			createdAt: String(row.created_at),
+			replyToId:
+				typeof row.reply_to_id === "string" ? String(row.reply_to_id) : null,
 			isReplied: Boolean(row.is_replied),
 			likeCount: Number(row.like_count),
 			mediaCount: Number(row.media_count),
@@ -707,6 +717,140 @@ export function listTimelineItems({
 				}
 			: item;
 	});
+}
+
+const conversationTweetSelect = `
+  select
+    t.id,
+    t.text,
+    t.created_at,
+    t.reply_to_id,
+    t.entities_json,
+    t.media_json,
+    p.id as profile_id,
+    p.handle,
+    p.display_name,
+    p.bio,
+    p.followers_count,
+    p.following_count,
+    p.avatar_hue,
+    p.avatar_url,
+    p.created_at as profile_created_at
+  from tweets t
+  join profiles p on p.id = t.author_profile_id
+`;
+
+function getTweetById(
+	db: Database,
+	urlExpansionCache: UrlExpansionCache,
+	tweetId: string,
+): EmbeddedTweet | null {
+	const row = db
+		.prepare(`${conversationTweetSelect} where t.id = ?`)
+		.get(tweetId) as Record<string, unknown> | undefined;
+	if (!row) return null;
+	return buildEmbeddedTweet(db, urlExpansionCache, row, "");
+}
+
+function listTweetDescendants(
+	db: Database,
+	urlExpansionCache: UrlExpansionCache,
+	rootId: string,
+	limit: number,
+) {
+	if (limit <= 0) return [];
+	const rows = db
+		.prepare(
+			`
+      with recursive branch(id, depth) as (
+        select t.id, 0
+        from tweets t
+        where t.id = ?
+        union all
+        select child.id, branch.depth + 1
+        from tweets child
+        join branch on child.reply_to_id = branch.id
+        where branch.depth < 8
+      )
+      ${conversationTweetSelect}
+      join branch on branch.id = t.id
+      where t.id != ?
+      order by t.created_at asc
+      limit ?
+      `,
+		)
+		.all(rootId, rootId, limit) as Array<Record<string, unknown>>;
+
+	return rows
+		.map((row) => buildEmbeddedTweet(db, urlExpansionCache, row, ""))
+		.filter((tweet): tweet is EmbeddedTweet => Boolean(tweet));
+}
+
+function appendConversationTweets(
+	target: EmbeddedTweet[],
+	seen: Set<string>,
+	items: EmbeddedTweet[],
+	remaining: number,
+) {
+	for (const tweet of items) {
+		if (target.length >= remaining || seen.has(tweet.id)) continue;
+		seen.add(tweet.id);
+		target.push(tweet);
+	}
+}
+
+export function getTweetConversation(
+	tweetId: string,
+	limit = 80,
+): TweetConversationResponse | null {
+	const db = getNativeDb();
+	const urlExpansionCache: UrlExpansionCache = new Map();
+	const anchor = getTweetById(db, urlExpansionCache, tweetId);
+	if (!anchor) return null;
+
+	const ancestors: EmbeddedTweet[] = [];
+	let current = anchor;
+	for (let depth = 0; depth < 12 && current.replyToId; depth += 1) {
+		const parent = getTweetById(db, urlExpansionCache, current.replyToId);
+		if (!parent || ancestors.some((tweet) => tweet.id === parent.id)) break;
+		ancestors.push(parent);
+		current = parent;
+	}
+
+	const required = [...ancestors].reverse();
+	required.push(anchor);
+	const root = required[0] ?? anchor;
+	const seen = new Set<string>();
+	const items = required.filter((tweet) => {
+		if (seen.has(tweet.id)) return false;
+		seen.add(tweet.id);
+		return true;
+	});
+	const remainingAfterRequired = Math.max(0, limit - items.length);
+	const focusedDescendants = listTweetDescendants(
+		db,
+		urlExpansionCache,
+		anchor.id,
+		remainingAfterRequired,
+	);
+	appendConversationTweets(items, seen, focusedDescendants, limit);
+
+	if (items.length < limit && root.id !== anchor.id) {
+		const ambientDescendants = listTweetDescendants(
+			db,
+			urlExpansionCache,
+			root.id,
+			limit,
+		);
+		appendConversationTweets(items, seen, ambientDescendants, limit);
+	}
+
+	items.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+
+	return {
+		anchorId: anchor.id,
+		items,
+	};
 }
 
 export function listDmConversations({

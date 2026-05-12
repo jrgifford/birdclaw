@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { TimelineCard } from "./TimelineCard";
 
 const item = {
@@ -97,6 +97,10 @@ const item = {
 };
 
 describe("TimelineCard", () => {
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
 	it("renders tweet metadata and replies", () => {
 		const onReply = vi.fn();
 		const { container } = render(
@@ -255,5 +259,48 @@ describe("TimelineCard", () => {
 			"https://pbs.twimg.com/media/HIB4bvDXQAAUcO8.png",
 		);
 		expect(screen.getAllByText("pbs.twimg.com").length).toBeGreaterThan(0);
+	});
+
+	it("expands the archived conversation when the tweet row is clicked", async () => {
+		const fetchMock = vi.fn().mockResolvedValue({
+			ok: true,
+			json: async () => ({
+				ok: true,
+				anchorId: "tweet_1",
+				items: [
+					{
+						id: "tweet_parent",
+						text: "Parent in thread",
+						createdAt: "2026-03-08T11:30:00.000Z",
+						replyToId: null,
+						author: item.author,
+						entities: {},
+						media: [],
+					},
+					{
+						id: "tweet_1",
+						text: "Clicked tweet in thread",
+						createdAt: "2026-03-08T12:00:00.000Z",
+						replyToId: "tweet_parent",
+						author: item.author,
+						entities: {},
+						media: [],
+					},
+				],
+			}),
+		});
+		vi.stubGlobal("fetch", fetchMock);
+		const { container } = render(
+			<TimelineCard item={item} onReply={vi.fn()} />,
+		);
+		const row = container.querySelector("[data-perf='timeline-card']");
+		if (!row) throw new Error("timeline card missing");
+
+		fireEvent.click(row);
+
+		expect(fetchMock).toHaveBeenCalledWith("/api/conversation?tweetId=tweet_1");
+		expect(await screen.findByText("Parent in thread")).toBeInTheDocument();
+		expect(screen.getByText("2 tweets in conversation")).toBeInTheDocument();
+		expect(screen.getByText("selected")).toBeInTheDocument();
 	});
 });
