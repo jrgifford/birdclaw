@@ -75,6 +75,7 @@ birdclaw sync following
 birdclaw search tweets <query>
 birdclaw search dms <query>
 birdclaw mentions export [query]
+birdclaw media fetch
 birdclaw dms list
 birdclaw mute <handle-or-id>
 birdclaw unmute <handle-or-id>
@@ -443,6 +444,40 @@ Notes:
 - in paged `xurl` mode, `--limit` is the page size, not the total returned item count
 - query and reply-state filters still work in `xurl` mode, but the filtered response is rebuilt from the local canonical store after sync
 - default live source can live in `~/.birdclaw/config.json` under `mentions.dataSource`
+
+### `media fetch`
+
+- fill the local originals cache for images, videos, and animated GIFs whose tweets already live in the local SQLite store
+- reuse bytes already extracted by `import archive` before falling back to the CDN; reuses are counted in JSON output as `reused_from_archive` and spend zero CDN bandwidth
+- only fetch URLs birdclaw already has from an archive or live sync record; never enumerate, crawl, or derive CDN URLs
+- skip files already present on disk; resume partial downloads with `Range: bytes=<size>-`
+- back off on `429`; cap each file at `--max-bytes`
+
+Flags:
+
+- `--account <accountId>`
+- `--limit <n>` - stop after N tweets processed
+- `--kind <kind>` - tweet/collection kind, e.g. `home`, `like`, `bookmark`, `mention`
+- `--since <isoDate>` - only consider tweets created at or after this date
+- `--parallel <n>` - concurrent image workers, capped at 5 (default `1`)
+- `--pacing-ms <n>` - delay between image request starts (default `250`)
+- `--video-pacing-ms <n>` - separate delay between video request starts
+- `--retry-max <n>` - retries per file after rate limiting (default `3`)
+- `--include-video` / `--no-include-video` - videos and animated GIFs are on by default
+- `--max-bytes <n>` - per-file size cap in bytes (default `104857600`)
+- `--dry-run` - list what would be fetched without downloading
+- `--json`
+
+JSON output carries `images_fetched`, `videos_fetched`, `gifs_fetched`, `reused_from_archive`, `skipped_cached`, `failed`, `rate_limited`, per-kind byte counters, and a `failures[]` array. See [Media](media.md) for the full pipeline.
+
+Examples:
+
+```bash
+birdclaw media fetch --json
+birdclaw media fetch --dry-run --limit 20
+birdclaw media fetch --include-video --video-pacing-ms 1500 --max-bytes 209715200 --json
+birdclaw media fetch --no-include-video --parallel 3 --pacing-ms 250 --json
+```
 
 ### `profiles replies <handle-or-id>`
 

@@ -25,7 +25,7 @@ const brewInstall = "brew install steipete/tap/birdclaw";
 
 const sections = [
 	["Start", ["index.md", "install.md", "quickstart.md", "configuration.md"]],
-	["Archive & Sync", ["archive.md", "sync.md", "backup.md", "jobs.md"]],
+	["Archive & Sync", ["archive.md", "sync.md", "media.md", "backup.md", "jobs.md"]],
 	[
 		"Reading & Triage",
 		["search.md", "mentions.md", "dms.md", "inbox.md", "research.md"],
