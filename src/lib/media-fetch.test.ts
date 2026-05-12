@@ -113,6 +113,42 @@ describe("media fetch", () => {
 		);
 	});
 
+	it("scopes kind filters through tweet account edges", async () => {
+		const root = home();
+		insertTweet("tweet_1", [pbs("edge_media")]);
+		getNativeDb()
+			.prepare(
+				`
+        insert into tweet_account_edges (
+          account_id, tweet_id, kind, first_seen_at, last_seen_at,
+          seen_count, source, raw_json, updated_at
+        ) values (?, ?, ?, ?, ?, 1, 'test', '{}', ?)
+        `,
+			)
+			.run(
+				"acct_studio",
+				"tweet_1",
+				"like",
+				"2026-05-01T12:00:00.000Z",
+				"2026-05-01T12:00:00.000Z",
+				"2026-05-01T12:00:00.000Z",
+			);
+
+		const result = await fetchTweetMedia({
+			account: "acct_studio",
+			kind: "like",
+			dryRun: true,
+		});
+
+		expect(result.would_fetch).toEqual([
+			expect.objectContaining({
+				media_key: "edge_media",
+				tweet_id: "tweet_1",
+				path: path.join(root, "media", "originals", "edge_media.jpg"),
+			}),
+		]);
+	});
+
 	it("skips existing files by media key", async () => {
 		const root = home();
 		const mediaDir = path.join(root, "media", "originals");
@@ -428,6 +464,34 @@ describe("media fetch", () => {
 				},
 			],
 		});
+	});
+
+	it("removes tmp files when streamed media exceeds max-bytes", async () => {
+		const root = home();
+		insertTweet("tweet_1", [{ type: "video", variants: [mp4("chunked")] }]);
+
+		const result = await fetchTweetMedia({
+			fetchImpl: async () =>
+				new Response(new Uint8Array([1, 2, 3, 4, 5]), {
+					headers: { "content-length": "2" },
+				}),
+			maxBytes: 4,
+			pacingMs: 0,
+		});
+
+		const mediaDir = path.join(root, "media", "originals");
+		expect(result).toMatchObject({
+			fetched: 0,
+			failed: 1,
+			failures: [
+				expect.objectContaining({
+					media_key: "chunked",
+					reason: "max-bytes",
+				}),
+			],
+		});
+		expect(existsSync(path.join(mediaDir, "chunked.tmp"))).toBe(false);
+		expect(existsSync(path.join(mediaDir, "chunked.mp4"))).toBe(false);
 	});
 
 	it("resumes partial video tmp files with a range request", async () => {

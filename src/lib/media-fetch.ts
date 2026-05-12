@@ -13,9 +13,9 @@ import {
 	readdirSync,
 	statSync,
 } from "node:fs";
-import { copyFile, rename } from "node:fs/promises";
+import { copyFile, rename, rm } from "node:fs/promises";
 import path from "node:path";
-import { Readable } from "node:stream";
+import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { getBirdclawPaths } from "./config";
 import { getNativeDb } from "./db";
@@ -307,20 +307,17 @@ function rowCandidates(row: Row, dir: string, includeVideo: boolean) {
 
 function queryRows(options: MediaFetchOptions) {
 	const params: Array<string | number> = [];
+	const account =
+		options.account && options.account !== "all" ? options.account : undefined;
+	const kind = normalizeKind(options.kind);
 	let sql = `
     select t.id, t.media_json
     from tweets t
     where t.media_count > 0
       and t.media_json not in ('', '[]', 'null')
   `;
-	if (options.account && options.account !== "all") {
-		params.push(options.account);
-		sql += " and t.account_id = ?";
-	}
-	if (options.kind && options.kind !== "all") {
-		params.push(options.kind.trim().toLowerCase());
-		sql += " and t.kind = ?";
-	}
+	const scopeClause = buildScopeClause(params, account, kind);
+	if (scopeClause) sql += ` and (${scopeClause})`;
 	if (options.since) {
 		params.push(options.since);
 		sql += " and t.created_at >= ?";
@@ -331,6 +328,68 @@ function queryRows(options: MediaFetchOptions) {
 		sql += " limit ?";
 	}
 	return getNativeDb().prepare(sql).all(params) as Row[];
+}
+
+function normalizeKind(kind?: string) {
+	const value = kind?.trim().toLowerCase();
+	if (!value || value === "all") return undefined;
+	if (value === "likes") return "like";
+	if (value === "bookmarks") return "bookmark";
+	return value;
+}
+
+function collectionKind(kind?: string) {
+	if (kind === "like") return "likes";
+	if (kind === "bookmark") return "bookmarks";
+	return undefined;
+}
+
+function buildScopeClause(
+	params: Array<string | number>,
+	account?: string,
+	kind?: string,
+) {
+	const clauses: string[] = [];
+	const accountClause = (alias: string) =>
+		account ? ` and ${alias}.account_id = ?` : "";
+	const pushAccount = () => {
+		if (account) params.push(account);
+	};
+	if (kind) {
+		params.push(kind);
+		pushAccount();
+		clauses.push(
+			`exists (select 1 from tweet_account_edges edge where edge.tweet_id = t.id and edge.kind = ?${accountClause("edge")})`,
+		);
+		const savedKind = collectionKind(kind);
+		if (savedKind) {
+			params.push(savedKind);
+			pushAccount();
+			clauses.push(
+				`exists (select 1 from tweet_collections collection where collection.tweet_id = t.id and collection.kind = ?${accountClause("collection")})`,
+			);
+			const legacyColumn = savedKind === "likes" ? "liked" : "bookmarked";
+			pushAccount();
+			clauses.push(
+				`t.${legacyColumn} = 1${account ? " and t.account_id = ?" : ""}`,
+			);
+		}
+		params.push(kind);
+		pushAccount();
+		clauses.push(`t.kind = ?${account ? " and t.account_id = ?" : ""}`);
+		return clauses.join(" or ");
+	}
+	if (account) {
+		params.push(account, account, account);
+		clauses.push(
+			"exists (select 1 from tweet_account_edges edge where edge.tweet_id = t.id and edge.account_id = ?)",
+		);
+		clauses.push(
+			"exists (select 1 from tweet_collections collection where collection.tweet_id = t.id and collection.account_id = ?)",
+		);
+		clauses.push("t.account_id = ?");
+	}
+	return clauses.join(" or ");
 }
 
 function collect(options: MediaFetchOptions, dir: string) {
@@ -420,19 +479,34 @@ async function writeResponseBody(
 	response: Response,
 	tmpPath: string,
 	append: boolean,
+	maxBytes: number,
+	initialBytes: number,
 ) {
 	if (!response.body) throw new Error("missing response body");
 	let bytes = 0;
 	const stream = Readable.fromWeb(
 		response.body as Parameters<typeof Readable.fromWeb>[0],
 	);
-	stream.on("data", (chunk: Buffer) => {
-		bytes += chunk.byteLength;
+	const limiter = new Transform({
+		transform(chunk: Buffer, _encoding, callback) {
+			bytes += chunk.byteLength;
+			if (initialBytes + bytes > maxBytes) {
+				callback(new Error("max-bytes"));
+				return;
+			}
+			callback(null, chunk);
+		},
 	});
-	await pipeline(
-		stream,
-		createWriteStream(tmpPath, { flags: append ? "a" : "w" }),
-	);
+	try {
+		await pipeline(
+			stream,
+			limiter,
+			createWriteStream(tmpPath, { flags: append ? "a" : "w" }),
+		);
+	} catch (error) {
+		await rm(tmpPath, { force: true });
+		throw error;
+	}
 	return bytes;
 }
 
@@ -454,7 +528,10 @@ async function fetchOne({
 	let rateLimited = false;
 	for (let attempt = 0; attempt <= retryMax; attempt += 1) {
 		const partialBytes = item.kind === "image" ? 0 : fileSize(item.tmpPath);
-		if (partialBytes > maxBytes) return fail(item, "max-bytes");
+		if (partialBytes > maxBytes) {
+			await rm(item.tmpPath, { force: true });
+			return fail(item, "max-bytes");
+		}
 		let response: Response;
 		try {
 			response = await fetchImpl(item.url, {
@@ -486,10 +563,31 @@ async function fetchOne({
 			contentRangeTotal(response) ??
 			(contentLength(response) ?? 0) +
 				(response.status === 206 ? partialBytes : 0);
-		if (expectedTotal > maxBytes) return fail(item, "max-bytes");
+		if (expectedTotal > maxBytes) {
+			await rm(item.tmpPath, { force: true });
+			return fail(item, "max-bytes");
+		}
 
 		const append = partialBytes > 0 && response.status === 206;
-		const bytes = await writeResponseBody(response, item.tmpPath, append);
+		let bytes = 0;
+		try {
+			bytes = await writeResponseBody(
+				response,
+				item.tmpPath,
+				append,
+				maxBytes,
+				partialBytes,
+			);
+		} catch (error) {
+			if (error instanceof Error && error.message === "max-bytes") {
+				return fail(item, "max-bytes", rateLimited);
+			}
+			return fail(
+				item,
+				error instanceof Error ? error.message : String(error),
+				rateLimited,
+			);
+		}
 		await rename(item.tmpPath, item.path);
 		return { fetched: 1, bytes, rateLimited, kind: item.kind };
 	}
