@@ -78,7 +78,9 @@ function parseSyncMode(value?: string): MentionSyncMode {
 	return mode;
 }
 
-function getCachedPaginationToken(cached?: { value: XurlMentionsResponse }) {
+function getCachedPaginationToken(
+	cached?: { value: XurlMentionsResponse } | null,
+) {
 	return typeof cached?.value.meta?.next_token === "string" &&
 		cached.value.meta.next_token.length > 0
 		? cached.value.meta.next_token
