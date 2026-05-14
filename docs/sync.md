@@ -1,21 +1,21 @@
 ---
 title: Sync
-description: "Sync likes, bookmarks, home timeline, mentions, and mention threads into local SQLite via xurl or bird."
+description: "Sync authored tweets, likes, bookmarks, home timeline, mentions, and mention threads into local SQLite via xurl or bird."
 ---
 
 # Sync
 
 `birdclaw sync` mirrors the live Twitter surfaces you actually use into the local SQLite store. Every sync command:
 
-- pulls from the best live transport for the surface; follow graph sync prefers `bird`, while likes/bookmarks still try `xurl` before `bird`
+- pulls from the best live transport for the surface; authored sync uses `xurl`, follow graph sync prefers `bird`, and likes/bookmarks still try `xurl` before `bird`
 - writes into the same canonical tables that archive import uses
 - refreshes the FTS5 index incrementally
 - saves cursors so the next run resumes where the last one stopped
-- caches results so repeat reads do not keep spending the API budget
+- caches results on cache-backed surfaces so repeat reads do not keep spending the API budget
 
 ## Common flags
 
-All `sync *` commands accept:
+Most `sync *` commands accept:
 
 - `--mode auto|xurl|bird` — transport selection; `auto` chooses the preferred transport for that command and falls back when possible
 - `--limit <n>` — page size in `xurl` mode, total in single-page modes
@@ -28,6 +28,21 @@ All `sync *` commands accept:
 - `--transport <kind>` — alias for `--mode` on some subcommands
 - `--dry-run` — read but do not write
 - `--json` — stable machine-readable output
+
+`sync authored` is intentionally narrower: `--mode xurl`, `--limit`, `--max-pages`, `--since-id`, `--until-id`, `--account`, and `--json`.
+
+## sync authored
+
+Mirror the authenticated user's authored timeline through `xurl`. Retweets are included and stored with their X `referenced_tweets` marker intact. The command resumes from a stored `since_id`; it does not audit old rows or detect deletes.
+
+On a first run with no authored cursor, Birdclaw seeds `since_id` from the newest local archive-backed tweet authored by that account when one exists. Fresh installs with no local baseline full-scan from X and print a stderr cost hint. Pass `--since-id <id>` to override the archive seed deliberately.
+
+```bash
+birdclaw sync authored --mode xurl --limit 100 --json
+birdclaw sync authored --account acct_primary --mode xurl --limit 100 --json
+```
+
+Authored tweets land in the canonical `tweets` table and get an `authored` account edge, so shared tweets can also remain home, mention, liked, or bookmarked rows for the same or another account.
 
 ## sync likes
 

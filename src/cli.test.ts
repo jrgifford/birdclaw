@@ -40,6 +40,7 @@ const listDmConversationsMock = vi.fn();
 const hydrateProfilesFromXMock = vi.fn();
 const inspectProfileRepliesMock = vi.fn();
 const runResearchModeMock = vi.fn();
+const syncAuthoredTweetsMock = vi.fn();
 const syncTimelineCollectionMock = vi.fn();
 const createPostMock = vi.fn();
 const createTweetReplyMock = vi.fn();
@@ -79,6 +80,15 @@ vi.mock("#/lib/archive-finder", () => ({
 }));
 
 vi.mock("#/lib/archive-import", () => ({
+	ARCHIVE_IMPORT_SLICES: [
+		"tweets",
+		"likes",
+		"bookmarks",
+		"directMessages",
+		"profiles",
+		"followers",
+		"following",
+	],
 	importArchive: (...args: unknown[]) => importArchiveMock(...args),
 }));
 
@@ -167,6 +177,18 @@ vi.mock("#/lib/research", () => ({
 	runResearchMode: (...args: unknown[]) => runResearchModeMock(...args),
 }));
 
+vi.mock("#/lib/authored-live", () => ({
+	AuthoredSyncError: class AuthoredSyncError extends Error {
+		constructor(
+			message: string,
+			public readonly exitCode: number,
+		) {
+			super(message);
+		}
+	},
+	syncAuthoredTweets: (...args: unknown[]) => syncAuthoredTweetsMock(...args),
+}));
+
 vi.mock("#/lib/queries", () => ({
 	getQueryEnvelope: () => getQueryEnvelopeMock(),
 	listTimelineItems: (...args: unknown[]) => listTimelineItemsMock(...args),
@@ -242,6 +264,7 @@ describe("cli", () => {
 		hydrateProfilesFromXMock.mockReset();
 		inspectProfileRepliesMock.mockReset();
 		runResearchModeMock.mockReset();
+		syncAuthoredTweetsMock.mockReset();
 		syncTimelineCollectionMock.mockReset();
 		createPostMock.mockReset();
 		createTweetReplyMock.mockReset();
@@ -382,6 +405,13 @@ describe("cli", () => {
 			kind: "likes",
 			count: 1,
 		});
+		syncAuthoredTweetsMock.mockResolvedValue({
+			ok: true,
+			source: "xurl",
+			kind: "authored",
+			count: 1,
+			partial: false,
+		});
 		createPostMock.mockResolvedValue({ ok: true, tweetId: "tweet_new" });
 		createTweetReplyMock.mockResolvedValue({
 			ok: true,
@@ -484,7 +514,9 @@ describe("cli", () => {
 
 		await runCli(["node", "birdclaw", "--json", "import", "archive"]);
 
-		expect(importArchiveMock).toHaveBeenCalledWith("/tmp/twitter.zip");
+		expect(importArchiveMock).toHaveBeenCalledWith("/tmp/twitter.zip", {
+			select: undefined,
+		});
 	});
 
 	it("dispatches paged live mention exports", async () => {
@@ -733,8 +765,101 @@ describe("cli", () => {
 			"/tmp/explicit.zip",
 		]);
 
-		expect(importArchiveMock).toHaveBeenCalledWith("/tmp/explicit.zip");
+		expect(importArchiveMock).toHaveBeenCalledWith("/tmp/explicit.zip", {
+			select: undefined,
+		});
 		expect(findArchivesMock).not.toHaveBeenCalled();
+	});
+
+	it("passes selected archive slices to import archive", async () => {
+		const { runCli } = await loadCli();
+
+		await runCli([
+			"node",
+			"birdclaw",
+			"--json",
+			"import",
+			"archive",
+			"/tmp/explicit.zip",
+			"--select",
+			"tweets,directMessages,dms,likes",
+		]);
+
+		expect(importArchiveMock).toHaveBeenCalledWith("/tmp/explicit.zip", {
+			select: ["tweets", "directMessages", "likes"],
+		});
+	});
+
+	it("rejects unknown archive import slices", async () => {
+		const consoleErrorMock = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
+		const { runCli } = await loadCli();
+
+		await runCli([
+			"node",
+			"birdclaw",
+			"import",
+			"archive",
+			"/tmp/explicit.zip",
+			"--select",
+			"likes,blocks",
+		]);
+
+		expect(process.exitCode).toBe(1);
+		expect(importArchiveMock).not.toHaveBeenCalled();
+		expect(consoleErrorMock).toHaveBeenCalledWith(
+			expect.stringContaining("--select must be a comma-separated subset"),
+		);
+		consoleErrorMock.mockRestore();
+	});
+
+	it("rejects prototype-property archive import selections", async () => {
+		const consoleErrorMock = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
+		const { runCli } = await loadCli();
+
+		await runCli([
+			"node",
+			"birdclaw",
+			"import",
+			"archive",
+			"/tmp/explicit.zip",
+			"--select",
+			"constructor",
+		]);
+
+		expect(process.exitCode).toBe(1);
+		expect(importArchiveMock).not.toHaveBeenCalled();
+		expect(consoleErrorMock).toHaveBeenCalledWith(
+			expect.stringContaining("--select must be a comma-separated subset"),
+		);
+		consoleErrorMock.mockRestore();
+	});
+
+	it("rejects empty archive import selections", async () => {
+		const consoleErrorMock = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
+		const { runCli } = await loadCli();
+
+		await runCli([
+			"node",
+			"birdclaw",
+			"import",
+			"archive",
+			"/tmp/explicit.zip",
+			"--select",
+			"",
+		]);
+
+		expect(process.exitCode).toBe(1);
+		expect(importArchiveMock).not.toHaveBeenCalled();
+		expect(consoleErrorMock).toHaveBeenCalledWith(
+			expect.stringContaining("--select must include at least one"),
+		);
+		consoleErrorMock.mockRestore();
 	});
 
 	it("reports backup auto-sync failures without hiding command output", async () => {
@@ -772,7 +897,9 @@ describe("cli", () => {
 			"birdclaw backup sync failed: push failed",
 		);
 		expect(listTimelineItemsMock).toHaveBeenCalled();
-		expect(importArchiveMock).toHaveBeenCalledWith("/tmp/x.zip");
+		expect(importArchiveMock).toHaveBeenCalledWith("/tmp/x.zip", {
+			select: undefined,
+		});
 		consoleErrorMock.mockRestore();
 	});
 
@@ -904,6 +1031,24 @@ describe("cli", () => {
 		await runCli([
 			"node",
 			"birdclaw",
+			"sync",
+			"authored",
+			"--account",
+			"acct_primary",
+			"--mode",
+			"xurl",
+			"--limit",
+			"50",
+			"--max-pages",
+			"2",
+			"--since-id",
+			"100",
+			"--until-id",
+			"200",
+		]);
+		await runCli([
+			"node",
+			"birdclaw",
 			"dms",
 			"list",
 			"--min-followers",
@@ -1003,6 +1148,14 @@ describe("cli", () => {
 			refresh: true,
 			cacheTtlMs: 30_000,
 			earlyStop: false,
+		});
+		expect(syncAuthoredTweetsMock).toHaveBeenCalledWith({
+			account: "acct_primary",
+			mode: "xurl",
+			limit: 50,
+			maxPages: 2,
+			sinceId: "100",
+			untilId: "200",
 		});
 		expect(listDmConversationsMock).toHaveBeenCalledWith({
 			account: undefined,
@@ -1235,6 +1388,21 @@ describe("cli", () => {
 		);
 		expect(process.exitCode).toBe(1);
 		expect(maybeAutoSyncBackupMock).not.toHaveBeenCalled();
+	});
+
+	it("sets exit code 5 when authored sync returns a partial result", async () => {
+		syncAuthoredTweetsMock.mockResolvedValueOnce({
+			ok: false,
+			source: "xurl",
+			kind: "authored",
+			count: 1,
+			partial: true,
+		});
+		const { runCli } = await loadCli();
+
+		await runCli(["node", "birdclaw", "sync", "authored", "--max-pages", "1"]);
+
+		expect(process.exitCode).toBe(5);
 	});
 
 	it("rejects invalid follow sync modes as json", async () => {

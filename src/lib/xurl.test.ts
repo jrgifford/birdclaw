@@ -664,6 +664,48 @@ describe("xurl transport wrapper", () => {
 		]);
 	});
 
+	it("passes rich user tweet scan params through to xurl", async () => {
+		execFileAsyncMock.mockResolvedValueOnce({
+			stdout: JSON.stringify({
+				data: [{ id: "tweet_1", author_id: "42", text: "hello" }],
+				includes: {
+					users: [{ id: "42", username: "sam", name: "Sam" }],
+					media: [{ media_key: "media_1", type: "photo" }],
+				},
+				meta: { next_token: "next" },
+			}),
+			stderr: "",
+		});
+		const { listUserTweets } = await import("./xurl");
+
+		await expect(
+			listUserTweets("42", {
+				maxResults: 100,
+				paginationToken: "page",
+				excludeRetweets: false,
+				sinceId: "10",
+				untilId: "20",
+				tweetFields: ["author_id", "created_at"],
+				expansions: ["author_id", "attachments.media_keys"],
+				userFields: ["id", "username"],
+				mediaFields: ["media_key", "type"],
+				auth: "oauth2",
+			}),
+		).resolves.toEqual({
+			items: [{ id: "tweet_1", author_id: "42", text: "hello" }],
+			nextToken: "next",
+			includes: {
+				users: [{ id: "42", username: "sam", name: "Sam" }],
+				media: [{ media_key: "media_1", type: "photo" }],
+			},
+		});
+		expect(execFileAsyncMock).toHaveBeenCalledWith("xurl", [
+			"--auth",
+			"oauth2",
+			"/2/users/42/tweets?max_results=100&tweet.fields=author_id%2Ccreated_at&expansions=author_id%2Cattachments.media_keys&user.fields=id%2Cusername&media.fields=media_key%2Ctype&since_id=10&until_id=20&pagination_token=page",
+		]);
+	});
+
 	it("passes pagination tokens and tolerates empty block payloads", async () => {
 		execFileAsyncMock.mockResolvedValueOnce({
 			stdout: JSON.stringify({ data: null, meta: null }),

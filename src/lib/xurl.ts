@@ -8,6 +8,7 @@ import type {
 	XurlMentionUser,
 	XurlTweetsResponse,
 	XurlUserTweet,
+	XurlUserTweetsResponse,
 } from "./types";
 
 const execFileAsync = promisify(execFile);
@@ -616,17 +617,47 @@ export async function listUserTweets(
 		maxResults,
 		paginationToken,
 		excludeRetweets = true,
+		sinceId,
+		untilId,
+		tweetFields,
+		expansions,
+		userFields,
+		mediaFields,
+		auth,
 	}: {
 		maxResults: number;
 		paginationToken?: string;
 		excludeRetweets?: boolean;
+		sinceId?: string;
+		untilId?: string;
+		tweetFields?: string[];
+		expansions?: string[];
+		userFields?: string[];
+		mediaFields?: string[];
+		auth?: "oauth2";
 	},
-) {
+): Promise<XurlUserTweetsResponse> {
 	const query = new URLSearchParams({
 		max_results: String(maxResults),
 		"tweet.fields":
+			tweetFields?.join(",") ??
 			"created_at,conversation_id,public_metrics,referenced_tweets",
 	});
+	if (expansions && expansions.length > 0) {
+		query.set("expansions", expansions.join(","));
+	}
+	if (userFields && userFields.length > 0) {
+		query.set("user.fields", userFields.join(","));
+	}
+	if (mediaFields && mediaFields.length > 0) {
+		query.set("media.fields", mediaFields.join(","));
+	}
+	if (sinceId) {
+		query.set("since_id", sinceId);
+	}
+	if (untilId) {
+		query.set("until_id", untilId);
+	}
 	if (excludeRetweets) {
 		query.set("exclude", "retweets");
 	}
@@ -634,7 +665,10 @@ export async function listUserTweets(
 		query.set("pagination_token", paginationToken);
 	}
 
-	const payload = await runJsonCommand([`/2/users/${userId}/tweets?${query}`]);
+	const endpoint = `/2/users/${userId}/tweets?${query}`;
+	const payload = await runJsonCommand(
+		auth === "oauth2" ? ["--auth", "oauth2", endpoint] : [endpoint],
+	);
 	const data = Array.isArray(payload.data)
 		? (payload.data as XurlUserTweet[])
 		: [];
@@ -647,6 +681,9 @@ export async function listUserTweets(
 		items: data,
 		nextToken:
 			typeof meta?.next_token === "string" ? String(meta.next_token) : null,
+		...(payload.includes && typeof payload.includes === "object"
+			? { includes: payload.includes as XurlUserTweetsResponse["includes"] }
+			: {}),
 	};
 }
 
