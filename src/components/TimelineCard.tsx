@@ -2,6 +2,8 @@ import { useState } from "react";
 import {
 	Bookmark,
 	BookmarkCheck,
+	CheckCircle2,
+	Circle,
 	Heart,
 	MessageCircle,
 	Repeat2,
@@ -29,6 +31,9 @@ import {
 	feedRowHandleClass,
 	feedRowHeaderClass,
 	feedRowNameClass,
+	feedRowStatePillActiveClass,
+	feedRowStatePillClass,
+	feedRowStatePillOpenClass,
 	feedRowTextClass,
 	feedRowTimestampClass,
 	mutedDotClass,
@@ -171,6 +176,7 @@ export function TimelineCard({
 		item.media,
 		item.id,
 	);
+	const hasConversation = Boolean(item.replyToTweet || item.replyToId);
 
 	async function loadConversation() {
 		if (conversationLoading || conversationItems.length > 0) return;
@@ -235,13 +241,40 @@ export function TimelineCard({
 					<span className={feedRowTimestampClass}>
 						{formatShortTimestamp(item.createdAt)}
 					</span>
-					{canReply ? (
-						<span className="ml-auto inline-flex items-center gap-1 text-[12px] text-[var(--ink-soft)]">
-							{item.isReplied ? (
-								<span className="text-[var(--accent)]">replied</span>
-							) : (
-								<span className="text-[var(--alert)]">needs reply</span>
-							)}
+					{canReply || hasConversation ? (
+						<span className="ml-auto inline-flex items-center gap-1">
+							{hasConversation ? (
+								<span
+									aria-label="Part of a conversation"
+									className={cx(
+										feedRowStatePillClass,
+										feedRowStatePillActiveClass,
+									)}
+									title="Part of a conversation"
+								>
+									<MessageCircle className="size-3.5" strokeWidth={2} />
+									thread
+								</span>
+							) : null}
+							{canReply ? (
+								<span
+									aria-label={item.isReplied ? "We replied" : "Reply open"}
+									className={cx(
+										feedRowStatePillClass,
+										item.isReplied
+											? feedRowStatePillActiveClass
+											: feedRowStatePillOpenClass,
+									)}
+									title={item.isReplied ? "We replied" : "Reply open"}
+								>
+									{item.isReplied ? (
+										<CheckCircle2 className="size-3.5" strokeWidth={2} />
+									) : (
+										<Circle className="size-3" strokeWidth={2.2} />
+									)}
+									{item.isReplied ? "replied" : "open"}
+								</span>
+							) : null}
 						</span>
 					) : null}
 				</header>

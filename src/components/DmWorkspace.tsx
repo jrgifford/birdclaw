@@ -1,3 +1,4 @@
+import { CheckCircle2, Circle } from "lucide-react";
 import { formatCompactNumber, formatShortTimestamp } from "#/lib/present";
 import type { DmConversationItem, DmMessageItem } from "#/lib/types";
 import {
@@ -29,7 +30,6 @@ import {
 	dmThreadNameClass,
 	dmThreadSubtitleClass,
 	dmThreadTitleClass,
-	emptyStateClass,
 	pillAlertClass,
 	pillClass,
 	pillSoftClass,
@@ -37,6 +37,7 @@ import {
 	timestampClass,
 } from "#/lib/ui";
 import { AvatarChip } from "./AvatarChip";
+import { BirdclawEmpty } from "./BrandMark";
 
 function MessageBubble({ message }: { message: DmMessageItem }) {
 	const outbound = message.direction === "outbound";
@@ -80,14 +81,17 @@ export function DmWorkspace({
 }) {
 	const participant = selectedConversation?.participant ?? null;
 	const subtitle = selectedConversation
-		? `${selectedConversation.needsReply ? "Reply owed" : "Thread clear"} · last message ${formatShortTimestamp(selectedConversation.lastMessageAt)}`
+		? `${selectedConversation.needsReply ? "Reply open" : "We replied"} · last message ${formatShortTimestamp(selectedConversation.lastMessageAt)}`
 		: "No conversation selected";
 
 	return (
 		<section className={dmShellClass}>
 			<aside className={dmListClass}>
 				{conversations.length === 0 ? (
-					<div className={emptyStateClass}>No conversations.</div>
+					<BirdclawEmpty
+						detail="Sync DMs to populate this lane."
+						label="No conversations"
+					/>
 				) : null}
 				{conversations.map((conversation) => {
 					const active = conversation.id === selectedConversation?.id;
@@ -127,8 +131,16 @@ export function DmWorkspace({
 											pillClass,
 											conversation.needsReply ? pillAlertClass : pillSoftClass,
 										)}
+										aria-label={
+											conversation.needsReply ? "Reply open" : "We replied"
+										}
 									>
-										{conversation.needsReply ? "needs reply" : "clear"}
+										{conversation.needsReply ? (
+											<Circle className="size-3" strokeWidth={2.2} />
+										) : (
+											<CheckCircle2 className="size-3.5" strokeWidth={2} />
+										)}
+										{conversation.needsReply ? "open" : "replied"}
 									</span>
 									<span className={cx(pillClass, pillSoftClass)}>
 										{conversation.influenceScore} ·{" "}
@@ -192,8 +204,8 @@ export function DmWorkspace({
 										<dt className={contextStatTermClass}>Reply state</dt>
 										<dd className={contextStatValueClass}>
 											{selectedConversation.needsReply
-												? "Needs reply"
-												: "Replied"}
+												? "Reply open"
+												: "We replied"}
 										</dd>
 									</div>
 									<div className={contextStatRowClass}>
@@ -221,8 +233,8 @@ export function DmWorkspace({
 							<div className={composerBarClass}>
 								<span className={timestampClass}>
 									{selectedConversation.needsReply
-										? "Reply still owed"
-										: "Thread clear"}
+										? "Reply open"
+										: "We replied"}
 								</span>
 								<button
 									className={primaryButtonClass}
@@ -236,7 +248,10 @@ export function DmWorkspace({
 						</div>
 					</>
 				) : (
-					<div className={emptyStateClass}>No DM selected.</div>
+					<BirdclawEmpty
+						detail="Pick a conversation to read the thread."
+						label="No DM selected"
+					/>
 				)}
 			</div>
 		</section>

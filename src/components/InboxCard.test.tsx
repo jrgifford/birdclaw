@@ -117,7 +117,7 @@ describe("InboxCard", () => {
 		);
 	});
 
-	it("labels resolved items and closes an open reply composer", () => {
+	it("labels replied items and closes an open reply composer", () => {
 		const onReplyToggle = vi.fn();
 		render(
 			<InboxCard
@@ -130,7 +130,7 @@ describe("InboxCard", () => {
 			/>,
 		);
 
-		expect(screen.getByText("resolved")).toBeInTheDocument();
+		expect(screen.getByText("replied")).toBeInTheDocument();
 		fireEvent.click(screen.getByRole("button", { name: "Close reply" }));
 		expect(onReplyToggle).toHaveBeenCalled();
 	});

@@ -15,8 +15,7 @@ export const sidebarShellClass =
 export const sidebarBrandClass =
 	"flex items-center gap-2.5 px-2 py-2 text-[var(--ink)] min-[1100px]:px-3";
 
-export const sidebarBrandMarkClass =
-	"grid size-9 place-items-center rounded-full bg-[var(--accent)] text-white";
+export const sidebarBrandMarkClass = "grid size-10 place-items-center";
 
 export const sidebarBrandCopyClass =
 	"hidden flex-col leading-tight min-[1100px]:flex";
@@ -120,6 +119,15 @@ export const feedRowBadgeAlertClass =
 
 export const feedRowBadgeNeutralClass =
 	"bg-[var(--bg-active)] text-[var(--ink-soft)]";
+
+export const feedRowStatePillClass =
+	"inline-flex shrink-0 items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--bg-active)] px-2 py-0.5 text-[12px] font-semibold text-[var(--ink-soft)]";
+
+export const feedRowStatePillActiveClass =
+	"border-[color:color-mix(in_srgb,var(--accent)_35%,var(--line))] bg-[var(--accent-soft)] text-[var(--accent)]";
+
+export const feedRowStatePillOpenClass =
+	"border-[color:color-mix(in_srgb,var(--ink-soft)_34%,var(--line))] bg-transparent text-[var(--ink-soft)]";
 
 /* Forms / inputs. */
 export const searchFieldShellClass =

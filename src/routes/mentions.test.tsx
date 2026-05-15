@@ -125,7 +125,7 @@ describe("mentions route", () => {
 		fireEvent.change(screen.getByPlaceholderText("Search mentions"), {
 			target: { value: "  thread  " },
 		});
-		fireEvent.click(screen.getByRole("button", { name: "all" }));
+		fireEvent.click(screen.getByRole("button", { name: "All" }));
 
 		await waitFor(() => {
 			const queryUrl = queryUrls.at(-1);

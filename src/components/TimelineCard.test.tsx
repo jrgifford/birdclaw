@@ -148,6 +148,7 @@ describe("TimelineCard", () => {
 		);
 
 		expect(screen.getByText("replied")).toBeInTheDocument();
+		expect(screen.getByLabelText("We replied")).toBeInTheDocument();
 		expect(screen.getByText("not bookmarked")).toBeInTheDocument();
 		expect(screen.getByText("0 media")).toBeInTheDocument();
 	});
@@ -171,6 +172,7 @@ describe("TimelineCard", () => {
 
 		expect(queries.queryByText("needs reply")).not.toBeInTheDocument();
 		expect(queries.queryByText("replied")).not.toBeInTheDocument();
+		expect(queries.queryByText("open")).not.toBeInTheDocument();
 		expect(
 			queries.queryByRole("button", { name: "Reply" }),
 		).not.toBeInTheDocument();

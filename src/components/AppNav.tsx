@@ -1,7 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
 	Bell,
-	Bird,
 	Bookmark,
 	Heart,
 	Home,
@@ -25,6 +24,7 @@ import {
 	sidebarNavClass,
 	sidebarShellClass,
 } from "#/lib/ui";
+import { BirdclawMark } from "./BrandMark";
 import { ThemeSlider } from "./ThemeSlider";
 
 const links = [
@@ -48,7 +48,7 @@ export function AppNav() {
 			<div className="flex flex-col">
 				<Link to="/" className={sidebarBrandClass}>
 					<span className={sidebarBrandMarkClass}>
-						<Bird className="size-5" strokeWidth={2.4} />
+						<BirdclawMark className="size-10" />
 					</span>
 					<span className={sidebarBrandCopyClass}>
 						<span className={sidebarBrandTitleClass}>birdclaw</span>

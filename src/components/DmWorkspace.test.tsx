@@ -81,7 +81,7 @@ describe("DmWorkspace", () => {
 			/>,
 		);
 
-		expect(screen.getByText("No DM selected.")).toBeInTheDocument();
+		expect(screen.getByText("No DM selected")).toBeInTheDocument();
 	});
 
 	it("renders clear thread metadata and outbound bubbles", () => {
@@ -125,9 +125,8 @@ describe("DmWorkspace", () => {
 		}
 		fireEvent.click(conversationButton);
 		expect(onSelectConversation).toHaveBeenCalledWith("dm_2");
-		expect(screen.getByText("clear")).toBeInTheDocument();
-		expect(screen.getByText("Thread clear")).toBeInTheDocument();
-		expect(screen.getByText("Replied")).toBeInTheDocument();
+		expect(screen.getByText("replied")).toBeInTheDocument();
+		expect(screen.getAllByText("We replied").length).toBeGreaterThan(1);
 		expect(screen.getByText("@steipete")).toBeInTheDocument();
 		expect(screen.getByRole("button", { name: "Send reply" })).toBeDisabled();
 		expect(screen.getByText("done")).toBeInTheDocument();

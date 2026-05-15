@@ -3,13 +3,13 @@ import { formatShortTimestamp } from "#/lib/present";
 import type { EmbeddedTweet } from "#/lib/types";
 import {
 	cx,
-	emptyStateClass,
 	feedActionIconClass,
 	feedRowHandleClass,
 	feedRowNameClass,
 	feedRowTimestampClass,
 } from "#/lib/ui";
 import { AvatarChip } from "./AvatarChip";
+import { BirdclawEmpty, BirdclawLoading } from "./BrandMark";
 import { ProfilePreview } from "./ProfilePreview";
 import { TweetMediaGrid } from "./TweetMediaGrid";
 import { TweetRichText } from "./TweetRichText";
@@ -27,8 +27,11 @@ export function ConversationThread({
 }) {
 	if (loading) {
 		return (
-			<section className="mt-3 rounded-2xl border border-[var(--line)] bg-[var(--bg-card)] px-4 py-4 text-[14px] text-[var(--ink-soft)]">
-				Loading conversation...
+			<section className="mt-3 rounded-2xl border border-[var(--line)] bg-[var(--bg-card)]">
+				<BirdclawLoading
+					detail="Finding archived replies around this post"
+					label="Loading conversation"
+				/>
 			</section>
 		);
 	}
@@ -43,13 +46,11 @@ export function ConversationThread({
 
 	if (items.length <= 1) {
 		return (
-			<section
-				className={cx(
-					emptyStateClass,
-					"mt-3 rounded-2xl border border-[var(--line)] py-4",
-				)}
-			>
-				No other archived replies in this conversation.
+			<section className="mt-3 rounded-2xl border border-[var(--line)]">
+				<BirdclawEmpty
+					detail="This post has no other archived replies locally."
+					label="No thread context yet"
+				/>
 			</section>
 		);
 	}

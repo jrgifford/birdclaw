@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- Use the Birdclaw crab-bird mark in the web app chrome, loading states, and empty states; soften dark-mode contrast and replace text-only reply warnings with conversation/replied indicators.
 - Allow the local web app to respond when Tailscale Serve forwards requests through the `clawmac.sheep-coho.ts.net` hostname.
 - Speed up the default home timeline load on large local databases and keep malformed archived media URL entities from crashing the web timeline.
 - Preserve tweet media aspect ratios, open timeline media in an inline viewer, and suppress duplicate media URL cards.

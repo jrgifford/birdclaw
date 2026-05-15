@@ -5,6 +5,9 @@ test("navigates across the primary surfaces", async ({ page }) => {
 
 	await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
 	await expect(page.getByText("Quiet signal for Twitter.")).toBeVisible();
+	await expect(
+		page.locator('img[src="/birdclaw-mark.png"]').first(),
+	).toBeVisible();
 
 	await page.getByRole("link", { name: "Mentions" }).click();
 	await expect(page.getByRole("heading", { name: "Mentions" })).toBeVisible();
@@ -37,13 +40,33 @@ test("filters the home timeline by reply state", async ({ page }) => {
 
 	const cards = page.locator('[data-perf="timeline-card"]');
 	await expect(cards).toHaveCount(4);
+	await expect(page.getByLabel("Part of a conversation").first()).toBeVisible();
 
-	await page.getByRole("button", { name: /^replied$/ }).click();
+	await page.getByRole("button", { name: /^Replied$/ }).click();
 	await expect(cards).toHaveCount(1);
 	await expect(cards.first()).toContainText("best product teams");
+	await expect(page.getByLabel("We replied").first()).toBeVisible();
 
-	await page.getByRole("button", { name: /^unreplied$/ }).click();
+	await page.getByRole("button", { name: /^Unreplied$/ }).click();
 	await expect(cards).toHaveCount(3);
+	await expect(page.getByLabel("Reply open").first()).toBeVisible();
+});
+
+test("shows the animated Birdclaw mark while the timeline loads", async ({
+	page,
+}) => {
+	await page.route("**/api/query**", async (route) => {
+		await new Promise((resolve) => setTimeout(resolve, 250));
+		await route.continue();
+	});
+
+	await page.goto("/");
+
+	await expect(page.getByText("Loading posts")).toBeVisible();
+	await expect(
+		page.locator('.birdclaw-mark-animated img[src="/birdclaw-mark.png"]'),
+	).toBeVisible();
+	await expect(page.getByText("No posts to show")).toHaveCount(0);
 });
 
 test("expands timeline cards with media, quote context, and profile hover", async ({

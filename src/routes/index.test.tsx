@@ -123,7 +123,7 @@ describe("home route", () => {
 		fireEvent.change(screen.getByPlaceholderText("Search local timeline"), {
 			target: { value: "  signal  " },
 		});
-		fireEvent.click(screen.getByRole("button", { name: "replied" }));
+		fireEvent.click(screen.getByRole("button", { name: "Replied" }));
 
 		await waitFor(() => {
 			const queryUrl = queryUrls.at(-1);

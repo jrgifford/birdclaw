@@ -1,9 +1,9 @@
 import { Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { BirdclawEmpty, BirdclawLoading } from "#/components/BrandMark";
 import { TimelineCard } from "#/components/TimelineCard";
 import type { QueryEnvelope, QueryResponse, TimelineItem } from "#/lib/types";
 import {
-	emptyStateClass,
 	feedClass,
 	pageHeaderClass,
 	pageHeaderRowClass,
@@ -35,6 +35,7 @@ export function SavedTimelineView({
 }: SavedTimelineViewProps) {
 	const [meta, setMeta] = useState<QueryEnvelope | null>(null);
 	const [items, setItems] = useState<TimelineItem[]>([]);
+	const [loading, setLoading] = useState(true);
 	const [search, setSearch] = useState("");
 	const [refreshTick, setRefreshTick] = useState(0);
 
@@ -53,9 +54,11 @@ export function SavedTimelineView({
 			url.searchParams.set("search", search.trim());
 		}
 
+		setLoading(true);
 		fetch(url)
 			.then((response) => response.json())
-			.then((data: QueryResponse) => setItems(data.items as TimelineItem[]));
+			.then((data: QueryResponse) => setItems(data.items as TimelineItem[]))
+			.finally(() => setLoading(false));
 	}, [filter, refreshTick, search]);
 
 	const subtitle = useMemo(() => {
@@ -108,8 +111,16 @@ export function SavedTimelineView({
 				</div>
 			</header>
 			<section className={feedClass}>
-				{items.length === 0 ? (
-					<div className={emptyStateClass}>Nothing saved here yet.</div>
+				{loading ? (
+					<BirdclawLoading
+						detail={`Reading local ${TITLES[filter].toLowerCase()}`}
+						label={loadingLabel}
+					/>
+				) : items.length === 0 ? (
+					<BirdclawEmpty
+						detail="Sync this collection or broaden the search."
+						label="Nothing saved here yet"
+					/>
 				) : null}
 				{items.map((item) => (
 					<TimelineCard

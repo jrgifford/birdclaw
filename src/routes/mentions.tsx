@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { BirdclawEmpty, BirdclawLoading } from "#/components/BrandMark";
 import { TimelineCard } from "#/components/TimelineCard";
 import type {
 	QueryEnvelope,
@@ -10,7 +11,6 @@ import type {
 } from "#/lib/types";
 import {
 	cx,
-	emptyStateClass,
 	feedClass,
 	pageHeaderClass,
 	pageHeaderRowClass,
@@ -38,6 +38,7 @@ const TABS: Array<{ value: ReplyFilter; label: string }> = [
 function MentionsRoute() {
 	const [meta, setMeta] = useState<QueryEnvelope | null>(null);
 	const [items, setItems] = useState<TimelineItem[]>([]);
+	const [loading, setLoading] = useState(true);
 	const [replyFilter, setReplyFilter] = useState<ReplyFilter>("unreplied");
 	const [search, setSearch] = useState("");
 	const [refreshTick, setRefreshTick] = useState(0);
@@ -57,9 +58,11 @@ function MentionsRoute() {
 			url.searchParams.set("search", search.trim());
 		}
 
+		setLoading(true);
 		fetch(url)
 			.then((response) => response.json())
-			.then((data: QueryResponse) => setItems(data.items as TimelineItem[]));
+			.then((data: QueryResponse) => setItems(data.items as TimelineItem[]))
+			.finally(() => setLoading(false));
 	}, [refreshTick, replyFilter, search]);
 
 	const subtitle = useMemo(() => {
@@ -117,7 +120,7 @@ function MentionsRoute() {
 								onClick={() => setReplyFilter(tab.value)}
 							>
 								<span className="relative inline-flex flex-col items-center justify-center py-1">
-									{tab.value}
+									{tab.label}
 									{active ? <span className={tabButtonIndicatorClass} /> : null}
 								</span>
 							</button>
@@ -126,8 +129,16 @@ function MentionsRoute() {
 				</div>
 			</header>
 			<section className={feedClass}>
-				{items.length === 0 ? (
-					<div className={emptyStateClass}>No mentions in view.</div>
+				{loading ? (
+					<BirdclawLoading
+						detail="Checking local mentions and reply context"
+						label="Loading mentions"
+					/>
+				) : items.length === 0 ? (
+					<BirdclawEmpty
+						detail="Try All, search less narrowly, or sync mentions."
+						label="No mentions in this view"
+					/>
 				) : null}
 				{items.map((item) => (
 					<TimelineCard key={item.id} item={item} onReply={replyToTweet} />

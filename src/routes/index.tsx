@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { BirdclawEmpty, BirdclawLoading } from "#/components/BrandMark";
 import { TimelineCard } from "#/components/TimelineCard";
 import type {
 	QueryEnvelope,
@@ -10,7 +11,6 @@ import type {
 } from "#/lib/types";
 import {
 	cx,
-	emptyStateClass,
 	feedClass,
 	pageHeaderClass,
 	pageHeaderRowClass,
@@ -38,6 +38,7 @@ const TABS: Array<{ value: ReplyFilter; label: string }> = [
 function HomeRoute() {
 	const [meta, setMeta] = useState<QueryEnvelope | null>(null);
 	const [items, setItems] = useState<TimelineItem[]>([]);
+	const [loading, setLoading] = useState(true);
 	const [replyFilter, setReplyFilter] = useState<ReplyFilter>("all");
 	const [search, setSearch] = useState("");
 	const [refreshTick, setRefreshTick] = useState(0);
@@ -57,9 +58,11 @@ function HomeRoute() {
 			url.searchParams.set("search", search.trim());
 		}
 
+		setLoading(true);
 		fetch(url)
 			.then((response) => response.json())
-			.then((data: QueryResponse) => setItems(data.items as TimelineItem[]));
+			.then((data: QueryResponse) => setItems(data.items as TimelineItem[]))
+			.finally(() => setLoading(false));
 	}, [refreshTick, replyFilter, search]);
 
 	const subtitle = useMemo(() => {
@@ -117,7 +120,7 @@ function HomeRoute() {
 								onClick={() => setReplyFilter(tab.value)}
 							>
 								<span className="relative inline-flex flex-col items-center justify-center py-1">
-									{tab.value}
+									{tab.label}
 									{active ? <span className={tabButtonIndicatorClass} /> : null}
 								</span>
 							</button>
@@ -126,8 +129,16 @@ function HomeRoute() {
 				</div>
 			</header>
 			<section className={feedClass}>
-				{items.length === 0 ? (
-					<div className={emptyStateClass}>No posts to show.</div>
+				{loading ? (
+					<BirdclawLoading
+						detail="Reading the local timeline store"
+						label="Loading posts"
+					/>
+				) : items.length === 0 ? (
+					<BirdclawEmpty
+						detail="Try a different filter or sync the timeline again."
+						label="No posts in this view"
+					/>
 				) : null}
 				{items.map((item) => (
 					<TimelineCard key={item.id} item={item} onReply={replyToTweet} />

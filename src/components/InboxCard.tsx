@@ -1,5 +1,10 @@
 import { Link } from "@tanstack/react-router";
-import { ExternalLink, MessageCircle } from "lucide-react";
+import {
+	CheckCircle2,
+	Circle,
+	ExternalLink,
+	MessageCircle,
+} from "lucide-react";
 import { formatCompactNumber, formatShortTimestamp } from "#/lib/present";
 import type { InboxItem } from "#/lib/types";
 import {
@@ -86,7 +91,14 @@ export function InboxCard({
 						<span className={mutedDotClass} />
 						<span>influence {formatCompactNumber(item.influenceScore)}</span>
 						<span className={mutedDotClass} />
-						<span>{item.needsReply ? "needs reply" : "resolved"}</span>
+						<span className="inline-flex items-center gap-1">
+							{item.needsReply ? (
+								<Circle className="size-3" strokeWidth={2.2} />
+							) : (
+								<CheckCircle2 className="size-3.5" strokeWidth={2} />
+							)}
+							{item.needsReply ? "open" : "replied"}
+						</span>
 					</div>
 					<div className="flex items-center gap-2">
 						<button
