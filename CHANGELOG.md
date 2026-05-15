@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- Preserve tweet media aspect ratios, open timeline media in an inline viewer, and suppress duplicate media URL cards.
+
 ## 0.5.0 - 2026-05-15
 
 ### Added

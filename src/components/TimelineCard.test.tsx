@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	within,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TimelineCard } from "./TimelineCard";
 
@@ -98,6 +104,7 @@ const item = {
 
 describe("TimelineCard", () => {
 	afterEach(() => {
+		cleanup();
 		vi.unstubAllGlobals();
 	});
 
@@ -259,6 +266,168 @@ describe("TimelineCard", () => {
 			"https://pbs.twimg.com/media/HIB4bvDXQAAUcO8.png",
 		);
 		expect(screen.getAllByText("pbs.twimg.com").length).toBeGreaterThan(0);
+	});
+
+	it("does not duplicate media URLs as text links or preview cards", () => {
+		render(
+			<TimelineCard
+				item={{
+					...item,
+					id: "tweet_5",
+					text: "Screenshot https://t.co/image",
+					entities: {
+						urls: [
+							{
+								url: "https://t.co/image",
+								expandedUrl: "https://pbs.twimg.com/media/HIB4bvDXQAAUcO8.png",
+								displayUrl: "t.co/image",
+								start: 11,
+								end: 29,
+							},
+						],
+					},
+					media: [
+						{
+							url: "https://pbs.twimg.com/media/HIB4bvDXQAAUcO8.png?format=png&name=large",
+							type: "image",
+							altText: "Screenshot",
+							width: 1200,
+							height: 900,
+						},
+					],
+					mediaCount: 1,
+					replyToTweet: null,
+					quotedTweet: null,
+				}}
+				onReply={vi.fn()}
+			/>,
+		);
+
+		expect(screen.getByText("Screenshot")).toBeInTheDocument();
+		expect(screen.getByAltText("Screenshot")).toBeInTheDocument();
+		expect(screen.queryByText("t.co/image")).not.toBeInTheDocument();
+		expect(screen.queryByText("pbs.twimg.com")).not.toBeInTheDocument();
+		expect(screen.queryByRole("link", { name: /t\.co\/image/ })).toBeNull();
+	});
+
+	it("does not duplicate pic.twitter.com media URLs as text links or preview cards", () => {
+		render(
+			<TimelineCard
+				item={{
+					...item,
+					id: "tweet_6",
+					text: "Photo https://t.co/pic",
+					entities: {
+						urls: [
+							{
+								url: "https://t.co/pic",
+								expandedUrl: "https://x.com/ava/status/tweet_6/photo/1",
+								displayUrl: "pic.twitter.com/demo",
+								start: 6,
+								end: 22,
+							},
+						],
+					},
+					media: [
+						{
+							url: "https://pbs.twimg.com/media/demo.jpg",
+							type: "image",
+							altText: "Photo media",
+						},
+					],
+					mediaCount: 1,
+					replyToTweet: null,
+					quotedTweet: null,
+				}}
+				onReply={vi.fn()}
+			/>,
+		);
+
+		expect(screen.getByText("Photo")).toBeInTheDocument();
+		expect(screen.getByAltText("Photo media")).toBeInTheDocument();
+		expect(screen.queryByText("pic.twitter.com/demo")).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole("link", { name: /pic\.twitter\.com/ }),
+		).toBeNull();
+	});
+
+	it("keeps external status media links when the tweet has its own media", () => {
+		render(
+			<TimelineCard
+				item={{
+					...item,
+					id: "tweet_7",
+					text: "Look https://t.co/other https://t.co/pic2",
+					entities: {
+						urls: [
+							{
+								url: "https://t.co/other",
+								expandedUrl: "https://x.com/other/status/123/photo/1",
+								displayUrl: "x.com/other/status/123/photo/1",
+								start: 5,
+								end: 23,
+							},
+							{
+								url: "https://t.co/pic2",
+								expandedUrl: "https://x.com/other/status/456/photo/1",
+								displayUrl: "pic.twitter.com/other",
+								start: 24,
+								end: 41,
+							},
+						],
+					},
+					media: [
+						{
+							url: "https://pbs.twimg.com/media/own.jpg",
+							type: "image",
+							altText: "Own media",
+						},
+					],
+					mediaCount: 1,
+					replyToTweet: null,
+					quotedTweet: null,
+				}}
+				onReply={vi.fn()}
+			/>,
+		);
+
+		expect(screen.getByAltText("Own media")).toBeInTheDocument();
+		expect(
+			screen.getAllByRole("link", { name: /x\.com\/other\/status\/123/ }),
+		).toHaveLength(2);
+		expect(
+			screen.getByRole("link", { name: "pic.twitter.com/other" }),
+		).toHaveAttribute("href", "https://x.com/other/status/456/photo/1");
+	});
+
+	it("does not toggle conversation when closing the media viewer backdrop", () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal("fetch", fetchMock);
+		render(
+			<TimelineCard
+				item={{
+					...item,
+					id: "tweet_8",
+					entities: {},
+					media: [
+						{
+							url: "https://example.com/demo.jpg",
+							type: "image",
+							altText: "Demo image",
+						},
+					],
+					replyToTweet: null,
+					quotedTweet: null,
+				}}
+				onReply={vi.fn()}
+			/>,
+		);
+
+		fireEvent.click(screen.getByRole("button", { name: "Open tweet media 1" }));
+		fireEvent.click(screen.getByRole("dialog"));
+
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 	});
 
 	it("expands the archived conversation when the tweet row is clicked", async () => {

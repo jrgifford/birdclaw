@@ -7,7 +7,13 @@ import {
 	Repeat2,
 } from "lucide-react";
 import { formatCompactNumber, formatShortTimestamp } from "#/lib/present";
-import type { EmbeddedTweet, TimelineItem } from "#/lib/types";
+import type {
+	EmbeddedTweet,
+	TimelineItem,
+	TweetEntities,
+	TweetMediaItem,
+	TweetUrlEntity,
+} from "#/lib/types";
 import {
 	cx,
 	embeddedCardClass,
@@ -35,9 +41,94 @@ import { ProfilePreview } from "./ProfilePreview";
 import { TweetMediaGrid } from "./TweetMediaGrid";
 import { TweetRichText } from "./TweetRichText";
 
-function getVisibleUrlCards(item: TimelineItem) {
+function comparableUrl(value: string | undefined) {
+	if (!value) return null;
+	try {
+		const parsed = new URL(value);
+		return `${parsed.protocol}//${parsed.hostname}${parsed.pathname}`;
+	} catch {
+		return value.split("?")[0] ?? value;
+	}
+}
+
+function getMediaUrlSet(media: TweetMediaItem[]) {
+	const urls = new Set<string>();
+	for (const item of media) {
+		for (const url of [item.url, item.thumbnailUrl]) {
+			const comparable = comparableUrl(url);
+			if (comparable) urls.add(comparable);
+		}
+	}
+	return urls;
+}
+
+function isMediaUrlEntity(
+	entry: TweetUrlEntity,
+	mediaUrls: Set<string>,
+	tweetId: string,
+) {
+	if (
+		mediaUrls.size > 0 &&
+		isPicTwitterDisplayUrl(entry.displayUrl) &&
+		isOwnStatusMediaUrl(entry.expandedUrl, tweetId)
+	) {
+		return true;
+	}
+	for (const url of [entry.url, entry.expandedUrl, entry.displayUrl]) {
+		const comparable = comparableUrl(url);
+		if (comparable && mediaUrls.has(comparable)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+function isPicTwitterDisplayUrl(value: string) {
+	const normalized = value.toLowerCase().replace(/^https?:\/\//, "");
+	return normalized.startsWith("pic.twitter.com/");
+}
+
+function isOwnStatusMediaUrl(value: string, tweetId: string) {
+	try {
+		const parsed = new URL(value);
+		const host = parsed.hostname.replace(/^www\./, "");
+		if (host !== "x.com" && host !== "twitter.com") return false;
+		return parsed.pathname.split("/").includes(tweetId);
+	} catch {
+		return false;
+	}
+}
+
+function getVisibleEntities(
+	entities: TweetEntities,
+	media: TweetMediaItem[],
+	tweetId: string,
+) {
+	const mediaUrls = getMediaUrlSet(media);
+	if (mediaUrls.size === 0) return entities;
+	return {
+		...entities,
+		urls: (entities.urls ?? []).filter(
+			(entry) => !isMediaUrlEntity(entry, mediaUrls, tweetId),
+		),
+	};
+}
+
+function getHiddenMediaUrlRanges(
+	entities: TweetEntities,
+	media: TweetMediaItem[],
+	tweetId: string,
+) {
+	const mediaUrls = getMediaUrlSet(media);
+	if (mediaUrls.size === 0) return [];
+	return (entities.urls ?? [])
+		.filter((entry) => isMediaUrlEntity(entry, mediaUrls, tweetId))
+		.map((entry) => ({ start: entry.start, end: entry.end }));
+}
+
+function getVisibleUrlCards(item: TimelineItem, entities: TweetEntities) {
 	const quotedUrl = item.quotedTweet ? item.quotedTweet.id : null;
-	return (item.entities.urls ?? []).filter((entry) => {
+	return (entities.urls ?? []).filter((entry) => {
 		if (!item.quotedTweet) return true;
 		return !entry.expandedUrl.includes(quotedUrl ?? "");
 	});
@@ -68,6 +159,16 @@ export function TimelineCard({
 	);
 	const [conversationItems, setConversationItems] = useState<EmbeddedTweet[]>(
 		[],
+	);
+	const visibleEntities = getVisibleEntities(
+		item.entities,
+		item.media,
+		item.id,
+	);
+	const hiddenMediaUrlRanges = getHiddenMediaUrlRanges(
+		item.entities,
+		item.media,
+		item.id,
 	);
 
 	async function loadConversation() {
@@ -146,6 +247,7 @@ export function TimelineCard({
 				<TweetRichText
 					className={feedRowTextClass}
 					entities={item.entities}
+					hiddenUrlRanges={hiddenMediaUrlRanges}
 					text={item.text}
 				/>
 				<TweetMediaGrid items={item.media} />
@@ -159,7 +261,7 @@ export function TimelineCard({
 						<EmbeddedTweetCard item={item.quotedTweet} label="Quoted tweet" />
 					</div>
 				) : null}
-				{getVisibleUrlCards(item).map((entry, index) => (
+				{getVisibleUrlCards(item, visibleEntities).map((entry, index) => (
 					<LinkPreviewCard
 						key={`${entry.expandedUrl}-${String(index)}`}
 						entry={entry}

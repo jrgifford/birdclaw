@@ -218,7 +218,12 @@ function toFiniteNumber(value: unknown) {
 
 function extractTweetEntities(tweet: Record<string, unknown>) {
 	const entities = asRecord(tweet.entities);
-	const urls = asArray<Record<string, unknown>>(entities?.urls)
+	const urlEntries = [
+		...asArray<Record<string, unknown>>(entities?.urls),
+		...asArray<Record<string, unknown>>(entities?.media),
+	];
+	const seenUrls = new Set<string>();
+	const urls = urlEntries
 		.map((entry) => ({
 			url: String(entry.url ?? ""),
 			expandedUrl: String(
@@ -243,7 +248,11 @@ function extractTweetEntities(tweet: Record<string, unknown>) {
 						? entry.imageUrl
 						: typeof entry.thumbnail_url === "string"
 							? entry.thumbnail_url
-							: undefined,
+							: typeof entry.media_url_https === "string"
+								? entry.media_url_https
+								: typeof entry.media_url === "string"
+									? entry.media_url
+									: undefined,
 			siteName:
 				typeof entry.site_name === "string"
 					? entry.site_name
@@ -251,7 +260,13 @@ function extractTweetEntities(tweet: Record<string, unknown>) {
 						? entry.siteName
 						: undefined,
 		}))
-		.filter((entry) => entry.url.length > 0 || entry.expandedUrl.length > 0);
+		.filter((entry) => entry.url.length > 0 || entry.expandedUrl.length > 0)
+		.filter((entry) => {
+			const key = `${entry.start}:${entry.end}:${entry.url}:${entry.expandedUrl}`;
+			if (seenUrls.has(key)) return false;
+			seenUrls.add(key);
+			return true;
+		});
 	const mentions = asArray<Record<string, unknown>>(entities?.user_mentions)
 		.map((entry) => ({
 			username: String(entry.screen_name ?? ""),

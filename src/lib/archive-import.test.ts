@@ -520,7 +520,16 @@ function makeMediaVariantsArchive() {
     "tweet": {
       "id_str": "photo-1",
       "created_at": "Tue Jun 03 19:34:20 +0000 2025",
-      "full_text": "photo",
+      "full_text": "photo https://t.co/photo",
+      "entities": {
+        "media": [{
+          "url": "https://t.co/photo",
+          "expanded_url": "https://x.com/steipete/status/photo-1/photo/1",
+          "display_url": "pic.twitter.com/photo",
+          "indices": [6, 24],
+          "media_url_https": "https://pbs.twimg.com/photo.jpg"
+        }]
+      },
       "extended_entities": {
         "media": [{
           "media_url_https": "https://pbs.twimg.com/photo.jpg",
@@ -709,10 +718,17 @@ describe("archive import", () => {
 
 		await importArchive(archivePath);
 		const rows = getNativeDb()
-			.prepare("select id, media_json from tweets order by id")
-			.all() as Array<{ id: string; media_json: string }>;
+			.prepare("select id, entities_json, media_json from tweets order by id")
+			.all() as Array<{
+			id: string;
+			entities_json: string;
+			media_json: string;
+		}>;
 		const mediaByTweet = new Map(
 			rows.map((row) => [row.id, JSON.parse(row.media_json)]),
+		);
+		const entitiesByTweet = new Map(
+			rows.map((row) => [row.id, JSON.parse(row.entities_json)]),
 		);
 
 		expect(mediaByTweet.get("video-1")).toEqual([
@@ -763,6 +779,19 @@ describe("archive import", () => {
 				height: 800,
 			},
 		]);
+		expect(entitiesByTweet.get("photo-1")).toEqual({
+			urls: [
+				{
+					url: "https://t.co/photo",
+					expandedUrl: "https://x.com/steipete/status/photo-1/photo/1",
+					displayUrl: "pic.twitter.com/photo",
+					start: 6,
+					end: 24,
+					description: null,
+					imageUrl: "https://pbs.twimg.com/photo.jpg",
+				},
+			],
+		});
 	});
 
 	it("clears mention sync state on full archive re-import", async () => {

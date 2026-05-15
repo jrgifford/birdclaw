@@ -1,4 +1,5 @@
 import { Fragment } from "react";
+import type { ReactNode } from "react";
 import {
 	collectTweetSegments,
 	enrichFallbackUrlEntities,
@@ -16,10 +17,12 @@ export function TweetRichText({
 	text,
 	entities,
 	className = "body-copy",
+	hiddenUrlRanges = [],
 }: {
 	text: string;
 	entities: TweetEntities;
 	className?: string;
+	hiddenUrlRanges?: Array<{ start: number; end: number }>;
 }) {
 	const richEntities = enrichFallbackUrlEntities(text, entities);
 	const segments = collectTweetSegments(richEntities);
@@ -39,12 +42,20 @@ export function TweetRichText({
 				const prefix = text.slice(cursor, segment.start);
 				cursor = segment.end;
 
-				let node = (
+				let node: ReactNode = (
 					<Fragment key={`segment-${String(index)}`}>
 						{text.slice(segment.start, segment.end)}
 					</Fragment>
 				);
-				if (segment.kind === "mention" && segment.profile) {
+				if (
+					segment.kind === "url" &&
+					hiddenUrlRanges.some(
+						(range) =>
+							range.start === segment.start && range.end === segment.end,
+					)
+				) {
+					node = null;
+				} else if (segment.kind === "mention" && segment.profile) {
 					node = (
 						<ProfilePreview
 							key={`segment-${String(index)}`}

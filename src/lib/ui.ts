@@ -328,7 +328,7 @@ export function tweetMediaGridClass(count: number) {
 
 export function tweetMediaTileClass(index: number, count: number) {
 	return cx(
-		"tweet-media-tile relative block overflow-hidden bg-[var(--bg-active)]",
+		"tweet-media-tile relative block overflow-hidden border-0 bg-[var(--bg-active)] p-0 text-left",
 		count === 1 && "aspect-[16/10]",
 		count === 2 && "aspect-square",
 		count === 3 && index === 0 && "row-span-2 aspect-[3/4]",
