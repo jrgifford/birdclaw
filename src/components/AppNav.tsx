@@ -53,7 +53,7 @@ export function AppNav() {
 					<span className={sidebarBrandCopyClass}>
 						<span className={sidebarBrandTitleClass}>birdclaw</span>
 						<span className={sidebarBrandTaglineClass}>
-							Quiet signal for Twitter.
+							Fast search for your Twitter archive.
 						</span>
 					</span>
 				</Link>

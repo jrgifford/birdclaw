@@ -44,7 +44,9 @@ describe("AppNav", () => {
 			"Inbox",
 		);
 		expect(screen.getByRole("link", { name: "Blocks" })).toBeInTheDocument();
-		expect(screen.getByText("Quiet signal for Twitter.")).toBeInTheDocument();
+		expect(
+			screen.getByText("Fast search for your Twitter archive."),
+		).toBeInTheDocument();
 		expect(
 			screen.getByRole("button", { name: "System default" }),
 		).toBeInTheDocument();
