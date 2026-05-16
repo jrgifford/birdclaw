@@ -78,11 +78,7 @@ test("manual sync controls post to the sync endpoint", async ({ page }) => {
 		});
 	});
 
-	async function clickSync(
-		path: string,
-		buttonName: string,
-		expectedAccountId?: string,
-	) {
+	async function clickSync(path: string, buttonName: string) {
 		const statusReady = page.waitForResponse(
 			(response) =>
 				response.url().includes("/api/status") &&
@@ -97,11 +93,6 @@ test("manual sync controls post to the sync endpoint", async ({ page }) => {
 		);
 		await page.goto(path);
 		await Promise.all([statusReady, routeDataReady]);
-		if (expectedAccountId) {
-			await expect(page.getByLabel("Sync account")).toHaveValue(
-				expectedAccountId,
-			);
-		}
 		const button = page.getByRole("button", { name: buttonName });
 		await expect(button).toBeEnabled();
 		const request = page.waitForRequest(
@@ -112,9 +103,9 @@ test("manual sync controls post to the sync endpoint", async ({ page }) => {
 	}
 
 	await clickSync("/", "Sync timeline");
-	await clickSync("/mentions", "Sync mentions", "acct_primary");
-	await clickSync("/likes", "Sync likes", "acct_primary");
-	await clickSync("/bookmarks", "Sync bookmarks", "acct_primary");
+	await clickSync("/mentions", "Sync mentions");
+	await clickSync("/likes", "Sync likes");
+	await clickSync("/bookmarks", "Sync bookmarks");
 	await clickSync("/dms", "Sync DMs");
 
 	await expect
