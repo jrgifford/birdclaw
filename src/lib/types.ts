@@ -9,6 +9,9 @@ export interface AccountRecord {
 	name: string;
 	handle: string;
 	externalUserId?: string | null;
+	profileId?: string;
+	avatarHue?: number;
+	avatarUrl?: string;
 	transport: string;
 	isDefault: number;
 	createdAt: string;
@@ -438,6 +441,7 @@ export interface InboxItem {
 
 export interface InboxQuery {
 	kind?: InboxKind;
+	account?: string;
 	minScore?: number;
 	hideLowSignal?: boolean;
 	limit?: number;

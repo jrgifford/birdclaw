@@ -25,6 +25,7 @@ import {
 	sidebarNavClass,
 	sidebarShellClass,
 } from "#/lib/ui";
+import { AccountSwitcher } from "./AccountSwitcher";
 import { BirdclawMark } from "./BrandMark";
 import { ThemeSlider } from "./ThemeSlider";
 
@@ -55,7 +56,7 @@ export function AppNav() {
 					<span className={sidebarBrandCopyClass}>
 						<span className={sidebarBrandTitleClass}>birdclaw</span>
 						<span className={sidebarBrandTaglineClass}>
-							Fast search for your Twitter archive.
+							Fast search for your archive.
 						</span>
 					</span>
 				</Link>
@@ -83,6 +84,7 @@ export function AppNav() {
 				</nav>
 			</div>
 			<div className={sidebarFooterClass}>
+				<AccountSwitcher />
 				<ThemeSlider />
 			</div>
 		</aside>

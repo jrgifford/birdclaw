@@ -5,7 +5,29 @@ description: "Scheduler-friendly bookmark sync with launchd integration, audit l
 
 # Jobs
 
-`birdclaw jobs` is the scheduler-friendly subset of sync: short defaults, JSONL audit logs, lock files to prevent overlap, and a launchd installer for macOS.
+`birdclaw jobs` is the scheduler-friendly subset of sync: short defaults, JSONL audit logs, lock files to prevent overlap, and launchd installers for macOS.
+
+## `jobs sync-account`
+
+```bash
+birdclaw --json jobs sync-account --account acct_openclaw --limit 100 --max-pages 3 --refresh --allow-bird-account
+```
+
+What it does:
+
+- refreshes home timeline, mentions, mention threads, likes, bookmarks, and DMs for one account
+- uses `bird` for home, mentions, and DMs; likes/bookmarks use `auto` by default
+- appends one JSONL audit entry per run to `~/.birdclaw/audit/account-sync.jsonl`
+- records each step independently so one rate-limited surface does not hide the others
+- runs backup auto-sync after the scheduled refresh when enabled
+
+Install the LaunchAgent:
+
+```bash
+birdclaw --json jobs install-account-launchd --account acct_openclaw --program /opt/homebrew/bin/birdclaw --env-path ~/.config/bird/openclaw.env --allow-bird-account
+```
+
+The default interval is 1,800 seconds (30 minutes). Use `--steps timeline,mentions,dms` for a narrower job, or `--env-path ~/.config/bird/openclaw.env` when launchd needs account cookies. Pass `--allow-bird-account` only when the sourced cookies match `--account`; without it, Bird-backed timeline, mentions, and DM steps refuse non-default account writes.
 
 ## `jobs sync-bookmarks`
 
@@ -63,7 +85,7 @@ What it writes:
 Flags:
 
 - `--program <path>` — absolute path to the `birdclaw` executable on this machine (Homebrew, npm global, or source build)
-- `--env-file <path>` — source an export-only shell env file inside the scheduled process
+- `--env-path <path>` — source an export-only shell env file inside the scheduled process
 - `--no-load` — write the plist but do not load it; useful when you want to inspect first
 - `--all` — pass `--all` to the underlying sync, fetching every retrievable page each run (default caps at 5 pages)
 
@@ -84,7 +106,7 @@ chmod 600 ~/.config/bird/env.sh
 
 birdclaw --json jobs install-bookmarks-launchd \
   --program /opt/homebrew/bin/birdclaw \
-  --env-file ~/.config/bird/env.sh
+  --env-path ~/.config/bird/env.sh
 ```
 
 The plist sources that file inside the scheduled process. The cookies stay on your machine, in your home directory, with mode `0600`. They are never written into the plist itself.

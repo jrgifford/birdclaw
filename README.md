@@ -563,7 +563,22 @@ Configure stale-aware backup reads in `~/.birdclaw/config.json`:
 
 Read paths such as CLI search, inbox, API status/query, and web startup pull + merge from Git only when the last backup check is stale. Data-changing commands run a full backup sync afterward when this config is enabled. Set `BIRDCLAW_BACKUP_AUTO_SYNC=0` to disable that behavior for one process.
 
-### Scheduled Bookmark Sync
+### Scheduled Account and Bookmark Sync
+
+`birdclaw jobs sync-account` refreshes home timeline, mentions, mention threads, likes, bookmarks, and DMs for a selected account, then appends a per-step audit entry.
+
+```bash
+birdclaw --json jobs sync-account --account acct_openclaw --limit 100 --max-pages 3 --refresh --allow-bird-account
+tail -n 5 ~/.birdclaw/audit/account-sync.jsonl | jq .
+```
+
+On macOS, install the 30-minute LaunchAgent:
+
+```bash
+birdclaw --json jobs install-account-launchd --account acct_openclaw --program /opt/homebrew/bin/birdclaw --env-path ~/.config/bird/openclaw.env --allow-bird-account
+```
+
+Use `--env-path ~/.config/bird/openclaw.env` when launchd needs account-specific `bird` cookies. Pass `--allow-bird-account` only when those cookies match `--account`; otherwise Bird-backed timeline, mentions, and DM steps refuse non-default account writes to avoid misattribution. Use `--steps timeline,mentions,dms` to narrow the scheduled surfaces.
 
 `birdclaw jobs sync-bookmarks` refreshes live bookmarks and appends one JSONL audit entry per run. Each entry includes host, timestamps, duration, before/after bookmark counts, source transport, fetched count, backup sync result, and any error.
 
@@ -580,7 +595,7 @@ On macOS, install the 3-hour LaunchAgent after choosing the Birdclaw executable 
 birdclaw --json jobs install-bookmarks-launchd --program /opt/homebrew/bin/birdclaw
 ```
 
-If the machine uses `bird` with browser cookies that are not available to launchd, write an export-only env file with mode `0600` and install with `--env-file ~/.config/bird/env.sh`. Birdclaw sources that file inside the scheduled process without storing the secrets in the plist.
+If the machine uses `bird` with browser cookies that are not available to launchd, write an export-only env file with mode `0600` and install with `--env-path ~/.config/bird/env.sh`. Birdclaw sources that file inside the scheduled process without storing the secrets in the plist.
 
 The LaunchAgent writes `~/Library/LaunchAgents/com.steipete.birdclaw.bookmarks-sync.plist`, runs at load, then every 10,800 seconds. It writes the audit log to `~/.birdclaw/audit/bookmarks-sync.jsonl` and stdout/stderr to `~/.birdclaw/logs/bookmarks-sync.*.log`. A lock file prevents overlapping runs and records an `already-running` skip when needed. The default job fetches up to 5 pages every 3 hours; pass `--all` if you want every retrievable page each run.
 

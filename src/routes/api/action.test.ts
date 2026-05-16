@@ -82,7 +82,11 @@ describe("api action route", () => {
 			}),
 		});
 
-		expect(scoreInboxMock).toHaveBeenCalledWith({ kind: "mixed", limit: 4 });
+		expect(scoreInboxMock).toHaveBeenCalledWith({
+			kind: "mixed",
+			account: undefined,
+			limit: 4,
+		});
 		expect(response.status).toBe(200);
 	});
 
@@ -282,7 +286,11 @@ describe("api action route", () => {
 			}),
 		});
 
-		expect(scoreInboxMock).toHaveBeenCalledWith({ kind: "mixed", limit: 8 });
+		expect(scoreInboxMock).toHaveBeenCalledWith({
+			kind: "mixed",
+			account: undefined,
+			limit: 8,
+		});
 	});
 
 	it("uses fallback values when block payload fields are missing", async () => {

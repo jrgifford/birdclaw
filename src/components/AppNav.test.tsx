@@ -26,6 +26,10 @@ vi.mock("@tanstack/react-router", () => ({
 	}) => select({ location: { pathname: "/inbox" } }),
 }));
 
+vi.mock("./AccountSwitcher", () => ({
+	AccountSwitcher: () => null,
+}));
+
 import { AppNav } from "./AppNav";
 
 describe("AppNav", () => {
@@ -45,10 +49,12 @@ describe("AppNav", () => {
 		);
 		expect(screen.getByRole("link", { name: "Blocks" })).toBeInTheDocument();
 		expect(
-			screen.getByText("Fast search for your Twitter archive."),
+			screen.getByText("Fast search for your archive."),
 		).toBeInTheDocument();
 		expect(
-			screen.getByRole("button", { name: "System default" }),
+			screen.getByRole("button", {
+				name: "Theme: System default. Switch to Light theme.",
+			}),
 		).toBeInTheDocument();
 	});
 });

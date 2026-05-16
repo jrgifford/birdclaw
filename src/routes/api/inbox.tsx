@@ -23,6 +23,7 @@ export const Route = createFileRoute("/api/inbox")({
 						return jsonResponse(
 							listInboxItems({
 								kind: kind === "mentions" || kind === "dms" ? kind : "mixed",
+								account: url.searchParams.get("account") ?? undefined,
 								minScore: parseNumber(url.searchParams.get("minScore")),
 								hideLowSignal: url.searchParams.get("hideLowSignal") === "1",
 								limit: parseNumber(url.searchParams.get("limit")) ?? 20,

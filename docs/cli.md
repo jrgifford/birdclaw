@@ -324,6 +324,35 @@ Follow graph sync uses a 24-hour cache by default. Repeating the same sync comma
 
 `--allow-partial` acknowledges capped/incomplete snapshots and suppresses the warning. Incomplete snapshots are still recorded for audit, but they are not used for churn events.
 
+### `jobs sync-account`
+
+- refreshes home timeline, mentions, mention threads, likes, bookmarks, and DMs for one account
+- appends one JSONL audit entry per run to `~/.birdclaw/audit/account-sync.jsonl`
+- records each step independently with count, source, and error
+- uses `~/.birdclaw/locks/account-sync.lock` to skip overlapping runs
+- requires `--allow-bird-account` before Bird-backed steps write to a non-default `--account`
+- exits non-zero when any step failed
+
+Examples:
+
+```bash
+birdclaw --json jobs sync-account --account acct_openclaw --limit 100 --max-pages 3 --refresh --allow-bird-account
+tail -n 20 ~/.birdclaw/audit/account-sync.jsonl | jq .
+```
+
+### `jobs install-account-launchd`
+
+- writes `~/Library/LaunchAgents/com.steipete.birdclaw.account-sync.plist`
+- runs `jobs sync-account` every 30 minutes by default
+- uses `launchctl load -w` unless `--no-load` is passed
+- `--steps <steps>` narrows the scheduled surfaces
+- `--env-path <path>` sources account-specific `bird` cookies for launchd
+- `--allow-bird-account` asserts those cookies match `--account` for Bird-backed timeline, mentions, and DM steps
+
+```bash
+birdclaw --json jobs install-account-launchd --account acct_openclaw --program /opt/homebrew/bin/birdclaw --env-path ~/.config/bird/openclaw.env --allow-bird-account
+```
+
 ### `jobs sync-bookmarks`
 
 - runs a live bookmark refresh with scheduler-friendly defaults
@@ -351,7 +380,7 @@ tail -n 20 ~/.birdclaw/audit/bookmarks-sync.jsonl | jq .
 - runs `jobs sync-bookmarks` every 3 hours by default
 - uses `launchctl load -w` unless `--no-load` is passed
 - writes launchd stdout/stderr to `~/.birdclaw/logs/bookmarks-sync.*.log`
-- `--env-file <path>` sources an export-only shell env file inside the scheduled process, useful when `bird` needs `AUTH_TOKEN`/`CT0` outside an interactive browser session
+- `--env-path <path>` sources an export-only shell env file inside the scheduled process, useful when `bird` needs `AUTH_TOKEN`/`CT0` outside an interactive browser session
 
 ```bash
 birdclaw --json jobs install-bookmarks-launchd --program /opt/homebrew/bin/birdclaw

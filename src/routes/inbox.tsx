@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Sparkles } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useSelectedAccountId } from "#/components/account-selection";
 import { InboxCard } from "#/components/InboxCard";
 import type {
 	InboxItem,
@@ -49,6 +50,7 @@ function InboxRoute() {
 	const [replyDraft, setReplyDraft] = useState("");
 	const [isSendingReply, setIsSendingReply] = useState(false);
 	const [stats, setStats] = useState<InboxResponse["stats"] | null>(null);
+	const selectedAccountId = useSelectedAccountId(meta?.accounts);
 
 	useEffect(() => {
 		fetch("/api/status")
@@ -61,6 +63,9 @@ function InboxRoute() {
 		url.searchParams.set("kind", kind);
 		url.searchParams.set("minScore", minScore);
 		url.searchParams.set("refresh", String(refreshTick));
+		if (selectedAccountId) {
+			url.searchParams.set("account", selectedAccountId);
+		}
 		if (hideLowSignal) {
 			url.searchParams.set("hideLowSignal", "1");
 		}
@@ -71,7 +76,7 @@ function InboxRoute() {
 				setItems(data.items);
 				setStats(data.stats);
 			});
-	}, [hideLowSignal, kind, minScore, refreshTick]);
+	}, [hideLowSignal, kind, minScore, refreshTick, selectedAccountId]);
 
 	const subtitle = useMemo(() => {
 		if (!meta || !stats) return "Ranking unreplied mentions and DMs...";
@@ -87,6 +92,7 @@ function InboxRoute() {
 				body: JSON.stringify({
 					kind: "scoreInbox",
 					scoreKind: kind,
+					account: selectedAccountId,
 					limit: 8,
 				}),
 			});

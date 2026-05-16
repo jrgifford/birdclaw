@@ -63,6 +63,7 @@ function readStoredScores() {
 
 export function listInboxItems({
 	kind = "mixed",
+	account,
 	minScore = 0,
 	hideLowSignal = false,
 	limit = 20,
@@ -73,6 +74,7 @@ export function listInboxItems({
 	if (kind === "mixed" || kind === "mentions") {
 		for (const mention of listTimelineItems({
 			resource: "mentions",
+			account,
 			replyFilter: "unreplied",
 			limit: 50,
 		})) {
@@ -104,6 +106,7 @@ export function listInboxItems({
 
 	if (kind === "mixed" || kind === "dms") {
 		for (const dm of listDmConversations({
+			account,
 			replyFilter: "unreplied",
 			sort: "influence",
 			limit: 50,
@@ -166,11 +169,14 @@ function trySync<T>(try_: () => T) {
 
 export function scoreInboxEffect({
 	kind = "mixed",
+	account,
 	limit = 8,
-}: Pick<InboxQuery, "kind" | "limit"> = {}) {
+}: Pick<InboxQuery, "kind" | "account" | "limit"> = {}) {
 	return Effect.gen(function* () {
 		const db = yield* trySync(() => getNativeDb());
-		const items = yield* trySync(() => listInboxItems({ kind, limit }).items);
+		const items = yield* trySync(
+			() => listInboxItems({ kind, account, limit }).items,
+		);
 		const results = [];
 
 		for (const item of items) {
@@ -228,6 +234,8 @@ export function scoreInboxEffect({
 	});
 }
 
-export function scoreInbox(options: Pick<InboxQuery, "kind" | "limit"> = {}) {
+export function scoreInbox(
+	options: Pick<InboxQuery, "kind" | "account" | "limit"> = {},
+) {
 	return runEffectPromise(scoreInboxEffect(options));
 }

@@ -40,20 +40,32 @@ describe("ThemeSlider", () => {
 		vi.restoreAllMocks();
 	});
 
-	it("switches to dark mode and persists the choice", async () => {
+	it("cycles theme states and persists the choice", async () => {
 		render(
 			<ThemeProvider>
 				<ThemeSlider />
 			</ThemeProvider>,
 		);
 
-		const darkButton = await screen.findByRole("button", {
-			name: "Dark theme",
+		const themeButton = await screen.findByRole("button", {
+			name: "Theme: System default. Switch to Light theme.",
 		});
 		await waitFor(() => {
-			expect(darkButton).toBeEnabled();
+			expect(themeButton).toBeEnabled();
 		});
-		fireEvent.click(darkButton);
+		fireEvent.click(themeButton);
+
+		await waitFor(() => {
+			expect(document.documentElement.dataset.theme).toBe("light");
+		});
+		expect(document.documentElement.dataset.themePreference).toBe("light");
+		expect(window.localStorage.getItem("birdclaw-theme")).toBe("light");
+
+		fireEvent.click(
+			screen.getByRole("button", {
+				name: "Theme: Light theme. Switch to Dark theme.",
+			}),
+		);
 
 		await waitFor(() => {
 			expect(document.documentElement.dataset.theme).toBe("dark");
@@ -62,29 +74,22 @@ describe("ThemeSlider", () => {
 		expect(window.localStorage.getItem("birdclaw-theme")).toBe("dark");
 	});
 
-	it("keeps the active theme when clicked", async () => {
-		const startViewTransition = vi.fn();
-		(
-			document as unknown as {
-				startViewTransition?: typeof startViewTransition;
-			}
-		).startViewTransition = startViewTransition;
-
+	it("uses one button instead of a three-way selector", async () => {
 		render(
 			<ThemeProvider>
 				<ThemeSlider />
 			</ThemeProvider>,
 		);
 
-		const systemButton = await screen.findByRole("button", {
-			name: "System default",
+		const themeButton = await screen.findByRole("button", {
+			name: "Theme: System default. Switch to Light theme.",
 		});
 		await waitFor(() => {
-			expect(systemButton).toBeEnabled();
+			expect(themeButton).toBeEnabled();
 		});
-		fireEvent.click(systemButton);
 
-		expect(document.documentElement.dataset.themePreference).toBe("system");
-		expect(startViewTransition).not.toHaveBeenCalled();
+		expect(screen.getAllByRole("button")).toHaveLength(1);
+		expect(screen.queryByRole("button", { name: "Light theme" })).toBeNull();
+		expect(screen.queryByRole("button", { name: "Dark theme" })).toBeNull();
 	});
 });

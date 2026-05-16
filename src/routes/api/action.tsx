@@ -58,6 +58,7 @@ export const Route = createFileRoute("/api/action")({
 						} else if (body.kind === "scoreInbox") {
 							result = yield* scoreInboxEffect({
 								kind: ((body.scoreKind as InboxKind) || "mixed") as InboxKind,
+								account: body.account,
 								limit: body.limit ? Number(body.limit) : 8,
 							});
 						} else if (body.kind === "blockProfile") {

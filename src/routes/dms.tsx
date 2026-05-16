@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { DmWorkspace } from "#/components/DmWorkspace";
 import { FeedEmpty, FeedError, FeedLoading } from "#/components/FeedState";
 import { SyncNowButton } from "#/components/SyncNowButton";
+import { useSelectedAccountId } from "#/components/account-selection";
 import {
 	fetchQueryEnvelope,
 	fetchQueryResponse,
@@ -64,6 +65,7 @@ function DmsRoute() {
 	const [refreshTick, setRefreshTick] = useState(0);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	const selectedAccountId = useSelectedAccountId(meta?.accounts);
 
 	async function loadStatus() {
 		setMeta(await fetchQueryEnvelope());
@@ -83,6 +85,9 @@ function DmsRoute() {
 		url.searchParams.set("minInfluenceScore", minInfluenceScore);
 		url.searchParams.set("refresh", String(refreshTick));
 		url.searchParams.set("sort", sort);
+		if (selectedAccountId) {
+			url.searchParams.set("account", selectedAccountId);
+		}
 		if (selectedConversationId) {
 			url.searchParams.set("conversationId", selectedConversationId);
 		}
@@ -144,6 +149,7 @@ function DmsRoute() {
 		replyFilter,
 		search,
 		selectedConversationId,
+		selectedAccountId,
 		sort,
 	]);
 
@@ -241,6 +247,7 @@ function DmsRoute() {
 						<p className={pageSubtitleClass}>{subtitle}</p>
 					</div>
 					<SyncNowButton
+						accounts={meta?.accounts}
 						kind="dms"
 						label="Sync DMs"
 						onSynced={refreshLocalView}

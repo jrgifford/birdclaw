@@ -145,11 +145,13 @@ describe("web sync dispatcher", () => {
 
 		const result = await runWebSync("timeline");
 
-		expect(syncHomeTimelineMock).toHaveBeenCalledWith({
-			limit: 100,
-			following: true,
-			refresh: true,
-		});
+		expect(syncHomeTimelineMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				limit: 100,
+				following: true,
+				refresh: true,
+			}),
+		);
 		expect(maybeAutoSyncBackupMock).toHaveBeenCalled();
 		expect(result).toMatchObject({
 			ok: true,
@@ -332,7 +334,7 @@ describe("web sync dispatcher", () => {
 		});
 	});
 
-	it("ignores selected accounts for bird-only sync plans", async () => {
+	it("ignores selected accounts for Bird-only sync plans", async () => {
 		const pending = deferred<{ ok: boolean; source: string; count: number }>();
 		syncHomeTimelineMock.mockReturnValue(pending.promise);
 

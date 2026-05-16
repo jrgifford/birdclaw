@@ -39,6 +39,7 @@ describe("api inbox route", () => {
 
 		expect(listInboxItemsMock).toHaveBeenCalledWith({
 			kind: "dms",
+			account: undefined,
 			minScore: 55,
 			hideLowSignal: true,
 			limit: 5,
@@ -60,6 +61,7 @@ describe("api inbox route", () => {
 
 		expect(listInboxItemsMock).toHaveBeenCalledWith({
 			kind: "mixed",
+			account: undefined,
 			minScore: undefined,
 			hideLowSignal: false,
 			limit: 20,
@@ -78,9 +80,25 @@ describe("api inbox route", () => {
 
 		expect(listInboxItemsMock).toHaveBeenCalledWith({
 			kind: "mixed",
+			account: undefined,
 			minScore: undefined,
 			hideLowSignal: false,
 			limit: 20,
 		});
+	});
+
+	it("passes selected accounts through to inbox queries", async () => {
+		listInboxItemsMock.mockReturnValue({
+			items: [],
+			stats: { total: 0, openai: 0, heuristic: 0 },
+		});
+
+		await GET({
+			request: new Request("http://localhost/api/inbox?account=acct_alt"),
+		});
+
+		expect(listInboxItemsMock).toHaveBeenCalledWith(
+			expect.objectContaining({ account: "acct_alt" }),
+		);
 	});
 });

@@ -367,6 +367,34 @@ function countTimelineEdges(db: Database, kind: "home" | "mention") {
 
 const RECENT_TIMELINE_EDGE_CANDIDATES = 5000;
 
+function getAccountProfileMeta(
+	db: Database,
+	account: { handle: string; external_user_id: string | null },
+) {
+	const handle = account.handle.replace(/^@/, "");
+	const externalProfileId = account.external_user_id
+		? `profile_user_${account.external_user_id}`
+		: "";
+	return db
+		.prepare(
+			`
+      select id, avatar_hue, avatar_url
+      from profiles
+      where id = ?
+         or lower(handle) = lower(?)
+      order by case
+        when id = 'profile_me' then 0
+        when id = ? then 1
+        else 2
+      end
+      limit 1
+    `,
+		)
+		.get(externalProfileId, handle, externalProfileId) as
+		| { id: string; avatar_hue: number; avatar_url: string | null }
+		| undefined;
+}
+
 export function getQueryEnvelopeEffect(): Effect.Effect<
 	QueryEnvelope,
 	unknown
@@ -414,15 +442,27 @@ export function getQueryEnvelopeEffect(): Effect.Effect<
 				needsReply: Number(counts.needsReply.count),
 				inbox: mentionCount + Number(counts.needsReply.count),
 			},
-			accounts: counts.accounts.map((row) => ({
-				id: row.id,
-				name: row.name,
-				handle: row.handle,
-				externalUserId: row.external_user_id,
-				transport: row.transport,
-				isDefault: row.is_default,
-				createdAt: row.created_at,
-			})) satisfies AccountRecord[],
+			accounts: counts.accounts.map((row) => {
+				const profile = getAccountProfileMeta(nativeDb, row);
+				return {
+					id: row.id,
+					name: row.name,
+					handle: row.handle,
+					externalUserId: row.external_user_id,
+					...(profile
+						? {
+								profileId: profile.id,
+								avatarHue: Number(profile.avatar_hue),
+								...(profile.avatar_url
+									? { avatarUrl: profile.avatar_url }
+									: {}),
+							}
+						: {}),
+					transport: row.transport,
+					isDefault: row.is_default,
+					createdAt: row.created_at,
+				};
+			}) satisfies AccountRecord[],
 			archives: counts.archives,
 			transport: counts.transport,
 		};
@@ -1195,10 +1235,13 @@ export function listDmConversations({
 
 export function getConversationThread(
 	conversationId: string,
+	filters: Pick<DmQuery, "account"> = {},
 ): { conversation: DmConversationItem; messages: DmMessageItem[] } | null {
-	const conversation = listDmConversations({ limit: 100 }).find(
-		(item) => item.id === conversationId,
-	);
+	const conversation = listDmConversations({
+		...filters,
+		conversationIds: [conversationId],
+		limit: 1,
+	}).find((item) => item.id === conversationId);
 
 	if (!conversation) {
 		return null;
@@ -1424,12 +1467,19 @@ export function queryResource(
 	if (resource === "dms") {
 		const dmFilters = filters as DmQuery & { conversationId?: string };
 		const items = listDmConversations(dmFilters);
-		const selectedConversationId = dmFilters.conversationId ?? items[0]?.id;
+		const requestedConversationId = dmFilters.conversationId;
+		const selectedConversationId =
+			requestedConversationId &&
+			items.some((item) => item.id === requestedConversationId)
+				? requestedConversationId
+				: items[0]?.id;
 		return {
 			resource,
 			items,
 			selectedConversation: selectedConversationId
-				? getConversationThread(selectedConversationId)
+				? getConversationThread(selectedConversationId, {
+						account: dmFilters.account,
+					})
 				: null,
 		};
 	}

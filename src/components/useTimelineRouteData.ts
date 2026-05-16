@@ -10,6 +10,7 @@ import {
 	fetchQueryResponse,
 	postAction,
 } from "#/lib/api-client";
+import { useSelectedAccountId } from "./account-selection";
 
 interface UseTimelineRouteDataOptions {
 	resource: Exclude<ResourceKind, "dms">;
@@ -33,6 +34,7 @@ export function useTimelineRouteData({
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [refreshTick, setRefreshTick] = useState(0);
+	const selectedAccountId = useSelectedAccountId(meta?.accounts);
 
 	async function loadStatus() {
 		setMeta(await fetchQueryEnvelope());
@@ -46,6 +48,9 @@ export function useTimelineRouteData({
 		const url = new URL("/api/query", window.location.origin);
 		url.searchParams.set("resource", resource);
 		url.searchParams.set("refresh", String(refreshTick));
+		if (selectedAccountId) {
+			url.searchParams.set("account", selectedAccountId);
+		}
 		if (replyFilter) {
 			url.searchParams.set("replyFilter", replyFilter);
 		}
@@ -100,6 +105,7 @@ export function useTimelineRouteData({
 		replyFilter,
 		resource,
 		search,
+		selectedAccountId,
 	]);
 
 	function retry() {
@@ -117,7 +123,7 @@ export function useTimelineRouteData({
 
 		await postAction({
 			kind: "replyTweet",
-			accountId: "acct_primary",
+			accountId: selectedAccountId ?? "acct_primary",
 			tweetId,
 			text,
 		});
@@ -133,5 +139,6 @@ export function useTimelineRouteData({
 		retry,
 		refreshLocalView,
 		replyToTweet,
+		selectedAccountId,
 	};
 }
