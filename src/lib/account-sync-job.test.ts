@@ -83,6 +83,7 @@ describe("account sync job", () => {
 			account: "acct_openclaw",
 			program: "/opt/homebrew/bin/birdclaw",
 			steps: ["timeline", "mentions", "dms"],
+			allowBirdAccount: true,
 			envFile: "~/.config/bird/openclaw.env",
 		});
 
@@ -94,6 +95,7 @@ describe("account sync job", () => {
 		expect(agent.programArguments[2]).toContain(
 			"'--steps' 'timeline,mentions,dms'",
 		);
+		expect(agent.programArguments[2]).toContain("'--allow-bird-account'");
 		expect(agent.plist).toContain("com.steipete.birdclaw.account-sync");
 	});
 
@@ -142,6 +144,104 @@ describe("account sync job", () => {
 			ok: false,
 			error: "backup failed",
 			steps: [{ kind: "mentions", ok: true, count: 3, source: "bird" }],
+		});
+	});
+
+	it("refuses Bird-backed non-default account sync without an assertion", async () => {
+		tempDir = mkdtempSync(path.join(os.tmpdir(), "birdclaw-account-job-"));
+		const logPath = path.join(tempDir, "audit.jsonl");
+		const lockPath = path.join(tempDir, "sync.lock");
+		const db = {
+			prepare: () => ({
+				get: () => ({ id: "acct_primary" }),
+			}),
+		} as never;
+
+		const result = await runAccountSyncJob({
+			account: "acct_openclaw",
+			steps: ["timeline"],
+			logPath,
+			lockPath,
+			db,
+		});
+
+		expect(syncHomeTimelineMock).not.toHaveBeenCalled();
+		expect(result).toMatchObject({
+			ok: false,
+			steps: [
+				{
+					kind: "timeline",
+					ok: false,
+					error: expect.stringContaining("--allow-bird-account"),
+				},
+			],
+		});
+	});
+
+	it("forces non-default saved collection syncs through xurl without an assertion", async () => {
+		tempDir = mkdtempSync(path.join(os.tmpdir(), "birdclaw-account-job-"));
+		const logPath = path.join(tempDir, "audit.jsonl");
+		const lockPath = path.join(tempDir, "sync.lock");
+		const db = {
+			prepare: () => ({
+				get: () => ({ id: "acct_primary" }),
+			}),
+		} as never;
+		syncTimelineCollectionMock.mockResolvedValue({
+			source: "xurl",
+			count: 4,
+		});
+
+		const result = await runAccountSyncJob({
+			account: "acct_openclaw",
+			steps: ["likes"],
+			logPath,
+			lockPath,
+			db,
+		});
+
+		expect(syncTimelineCollectionMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				kind: "likes",
+				account: "acct_openclaw",
+				mode: "xurl",
+			}),
+		);
+		expect(result).toMatchObject({
+			ok: true,
+			steps: [{ kind: "likes", ok: true, count: 4, source: "xurl" }],
+		});
+	});
+
+	it("refuses explicit Bird saved collection syncs for non-default accounts without an assertion", async () => {
+		tempDir = mkdtempSync(path.join(os.tmpdir(), "birdclaw-account-job-"));
+		const logPath = path.join(tempDir, "audit.jsonl");
+		const lockPath = path.join(tempDir, "sync.lock");
+		const db = {
+			prepare: () => ({
+				get: () => ({ id: "acct_primary" }),
+			}),
+		} as never;
+
+		const result = await runAccountSyncJob({
+			account: "acct_openclaw",
+			steps: ["bookmarks"],
+			mode: "bird",
+			logPath,
+			lockPath,
+			db,
+		});
+
+		expect(syncTimelineCollectionMock).not.toHaveBeenCalled();
+		expect(result).toMatchObject({
+			ok: false,
+			steps: [
+				{
+					kind: "bookmarks",
+					ok: false,
+					error: expect.stringContaining("--allow-bird-account"),
+				},
+			],
 		});
 	});
 });

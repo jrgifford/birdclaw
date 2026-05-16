@@ -568,17 +568,17 @@ Read paths such as CLI search, inbox, API status/query, and web startup pull + m
 `birdclaw jobs sync-account` refreshes home timeline, mentions, mention threads, likes, bookmarks, and DMs for a selected account, then appends a per-step audit entry.
 
 ```bash
-birdclaw --json jobs sync-account --account acct_openclaw --limit 100 --max-pages 3 --refresh
+birdclaw --json jobs sync-account --account acct_openclaw --limit 100 --max-pages 3 --refresh --allow-bird-account
 tail -n 5 ~/.birdclaw/audit/account-sync.jsonl | jq .
 ```
 
 On macOS, install the 30-minute LaunchAgent:
 
 ```bash
-birdclaw --json jobs install-account-launchd --account acct_openclaw --program /opt/homebrew/bin/birdclaw
+birdclaw --json jobs install-account-launchd --account acct_openclaw --program /opt/homebrew/bin/birdclaw --env-path ~/.config/bird/openclaw.env --allow-bird-account
 ```
 
-Use `--env-path ~/.config/bird/openclaw.env` when launchd needs account-specific `bird` cookies. Use `--steps timeline,mentions,dms` to narrow the scheduled surfaces.
+Use `--env-path ~/.config/bird/openclaw.env` when launchd needs account-specific `bird` cookies. Pass `--allow-bird-account` only when those cookies match `--account`; otherwise Bird-backed timeline, mentions, and DM steps refuse non-default account writes to avoid misattribution. Use `--steps timeline,mentions,dms` to narrow the scheduled surfaces.
 
 `birdclaw jobs sync-bookmarks` refreshes live bookmarks and appends one JSONL audit entry per run. Each entry includes host, timestamps, duration, before/after bookmark counts, source transport, fetched count, backup sync result, and any error.
 

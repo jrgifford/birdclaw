@@ -330,12 +330,13 @@ Follow graph sync uses a 24-hour cache by default. Repeating the same sync comma
 - appends one JSONL audit entry per run to `~/.birdclaw/audit/account-sync.jsonl`
 - records each step independently with count, source, and error
 - uses `~/.birdclaw/locks/account-sync.lock` to skip overlapping runs
+- requires `--allow-bird-account` before Bird-backed steps write to a non-default `--account`
 - exits non-zero when any step failed
 
 Examples:
 
 ```bash
-birdclaw --json jobs sync-account --account acct_openclaw --limit 100 --max-pages 3 --refresh
+birdclaw --json jobs sync-account --account acct_openclaw --limit 100 --max-pages 3 --refresh --allow-bird-account
 tail -n 20 ~/.birdclaw/audit/account-sync.jsonl | jq .
 ```
 
@@ -346,9 +347,10 @@ tail -n 20 ~/.birdclaw/audit/account-sync.jsonl | jq .
 - uses `launchctl load -w` unless `--no-load` is passed
 - `--steps <steps>` narrows the scheduled surfaces
 - `--env-path <path>` sources account-specific `bird` cookies for launchd
+- `--allow-bird-account` asserts those cookies match `--account` for Bird-backed timeline, mentions, and DM steps
 
 ```bash
-birdclaw --json jobs install-account-launchd --account acct_openclaw --program /opt/homebrew/bin/birdclaw
+birdclaw --json jobs install-account-launchd --account acct_openclaw --program /opt/homebrew/bin/birdclaw --env-path ~/.config/bird/openclaw.env --allow-bird-account
 ```
 
 ### `jobs sync-bookmarks`

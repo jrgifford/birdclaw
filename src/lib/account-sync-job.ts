@@ -12,6 +12,7 @@ import { syncMentions } from "./mentions-live";
 import type { Database } from "./sqlite";
 import {
 	syncTimelineCollection,
+	type TimelineCollectionKind,
 	type TimelineCollectionMode,
 } from "./timeline-collections-live";
 import { syncHomeTimeline } from "./timeline-live";
@@ -41,6 +42,7 @@ export interface AccountSyncJobOptions {
 	maxPages?: number;
 	refresh?: boolean;
 	cacheTtlMs?: number;
+	allowBirdAccount?: boolean;
 	logPath?: string;
 	lockPath?: string;
 	db?: Database;
@@ -70,6 +72,7 @@ export interface AccountSyncAuditEntry {
 		maxPages: number;
 		refresh: boolean;
 		cacheTtlMs?: number;
+		allowBirdAccount?: boolean;
 	};
 	steps: AccountSyncAuditStep[];
 	skipped?: "already-running";
@@ -87,6 +90,7 @@ export interface AccountSyncLaunchAgentOptions {
 	limit?: number;
 	maxPages?: number;
 	refresh?: boolean;
+	allowBirdAccount?: boolean;
 	cacheTtlSeconds?: number;
 	logPath?: string;
 	envFile?: string;
@@ -191,6 +195,43 @@ function readString(value: unknown, key: string) {
 	return typeof raw === "string" ? raw : undefined;
 }
 
+function defaultAccountId(db: Database) {
+	const row = db
+		.prepare(
+			`
+      select id
+      from accounts
+      order by is_default desc, created_at asc
+      limit 1
+      `,
+		)
+		.get() as { id: string } | undefined;
+	return row?.id;
+}
+
+function isExplicitNonDefaultAccount(
+	db: Database,
+	account: string | undefined,
+) {
+	if (!account) return false;
+	return account !== defaultAccountId(db);
+}
+
+function birdAccountError(kind: AccountSyncStepKind) {
+	return `Bird-backed ${kind} sync requires --allow-bird-account for non-default accounts; source matching cookies with --env-path first.`;
+}
+
+function resolveCollectionModeForAccount({
+	mode,
+	allowBirdAccount,
+}: {
+	mode: TimelineCollectionMode;
+	allowBirdAccount: boolean | undefined;
+}) {
+	if (allowBirdAccount || mode === "xurl") return mode;
+	return mode === "bird" ? undefined : "xurl";
+}
+
 async function runStep({
 	kind,
 	account,
@@ -199,14 +240,18 @@ async function runStep({
 	maxPages,
 	refresh,
 	cacheTtlMs,
+	allowBirdAccount,
 }: Required<
 	Pick<AccountSyncJobOptions, "mode" | "limit" | "maxPages" | "refresh">
 > &
-	Pick<AccountSyncJobOptions, "account" | "cacheTtlMs"> & {
+	Pick<AccountSyncJobOptions, "account" | "cacheTtlMs" | "allowBirdAccount"> & {
 		kind: AccountSyncStepKind;
 	}): Promise<AccountSyncAuditStep> {
 	try {
 		if (kind === "timeline") {
+			if (!allowBirdAccount) {
+				return { kind, ok: false, count: 0, error: birdAccountError(kind) };
+			}
 			const result = await syncHomeTimeline({
 				account,
 				limit,
@@ -222,6 +267,9 @@ async function runStep({
 			};
 		}
 		if (kind === "mentions") {
+			if (!allowBirdAccount) {
+				return { kind, ok: false, count: 0, error: birdAccountError(kind) };
+			}
 			const result = await syncMentions({
 				account,
 				mode: "bird",
@@ -253,6 +301,9 @@ async function runStep({
 			};
 		}
 		if (kind === "dms") {
+			if (!allowBirdAccount) {
+				return { kind, ok: false, count: 0, error: birdAccountError(kind) };
+			}
 			const result = await syncDirectMessagesViaCachedBird({
 				account,
 				limit: Math.min(50, limit),
@@ -267,10 +318,19 @@ async function runStep({
 			};
 		}
 
-		const result = await syncTimelineCollection({
-			kind,
-			account,
+		const collectionKind = kind as TimelineCollectionKind;
+		const collectionMode = resolveCollectionModeForAccount({
 			mode,
+			allowBirdAccount,
+		});
+		if (!collectionMode) {
+			return { kind, ok: false, count: 0, error: birdAccountError(kind) };
+		}
+
+		const result = await syncTimelineCollection({
+			kind: collectionKind,
+			account,
+			mode: collectionMode,
 			limit,
 			all: true,
 			maxPages,
@@ -302,6 +362,7 @@ export async function runAccountSyncJob({
 	maxPages = DEFAULT_ACCOUNT_SYNC_MAX_PAGES,
 	refresh = true,
 	cacheTtlMs,
+	allowBirdAccount,
 	logPath,
 	lockPath,
 	db,
@@ -324,7 +385,11 @@ export async function runAccountSyncJob({
 		maxPages,
 		refresh,
 		...(cacheTtlMs === undefined ? {} : { cacheTtlMs }),
+		...(allowBirdAccount ? { allowBirdAccount } : {}),
 	};
+	const birdAccountAllowed =
+		!isExplicitNonDefaultAccount(database, account) ||
+		Boolean(allowBirdAccount);
 
 	const releaseLock = await acquireLock(resolvedLockPath);
 	if (!releaseLock) {
@@ -357,6 +422,7 @@ export async function runAccountSyncJob({
 					maxPages,
 					refresh,
 					cacheTtlMs,
+					allowBirdAccount: birdAccountAllowed,
 				}),
 			);
 		}
@@ -420,6 +486,7 @@ function buildProgramArguments({
 	limit = DEFAULT_ACCOUNT_SYNC_LIMIT,
 	maxPages = DEFAULT_ACCOUNT_SYNC_MAX_PAGES,
 	refresh = true,
+	allowBirdAccount,
 	cacheTtlSeconds,
 	logPath,
 	envFile,
@@ -449,6 +516,9 @@ function buildProgramArguments({
 	}
 	if (refresh) {
 		args.push("--refresh");
+	}
+	if (allowBirdAccount) {
+		args.push("--allow-bird-account");
 	}
 	if (cacheTtlSeconds !== undefined) {
 		args.push("--cache-ttl", String(cacheTtlSeconds));

@@ -1157,6 +1157,10 @@ jobsCommand
 	.option("--max-pages <n>", "Stop after N pages", "3")
 	.option("--cache-ttl <seconds>", "Live-cache freshness window", "120")
 	.option("--refresh", "Bypass live-cache freshness window")
+	.option(
+		"--allow-bird-account",
+		"Assert bird cookies match --account for Bird-backed steps",
+	)
 	.option("--log <path>", "Audit JSONL path")
 	.action(async (options) => {
 		const result = await runAccountSyncJob({
@@ -1167,6 +1171,7 @@ jobsCommand
 			maxPages: Number(options.maxPages),
 			refresh: Boolean(options.refresh),
 			cacheTtlMs: Number(options.cacheTtl) * 1000,
+			allowBirdAccount: Boolean(options.allowBirdAccount),
 			logPath: options.log,
 		});
 		print(result, true);
@@ -1191,6 +1196,10 @@ jobsCommand
 	.option("--max-pages <n>", "Stop after N pages", "3")
 	.option("--cache-ttl <seconds>", "Live-cache freshness window", "120")
 	.option("--no-refresh", "Allow live-cache reuse")
+	.option(
+		"--allow-bird-account",
+		"Assert bird cookies match --account for Bird-backed steps",
+	)
 	.option("--log <path>", "Audit JSONL path")
 	.option("--env-path <path>", "Shell env file to source before running")
 	.option("--env-file <path>", "Deprecated alias for --env-path")
@@ -1209,6 +1218,7 @@ jobsCommand
 			limit: Number(options.limit),
 			maxPages: Number(options.maxPages),
 			refresh: options.refresh,
+			allowBirdAccount: Boolean(options.allowBirdAccount),
 			cacheTtlSeconds: Number(options.cacheTtl),
 			logPath: options.log,
 			envFile: options.envPath ?? options.envFile,

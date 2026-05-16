@@ -115,7 +115,7 @@ function summarizeSteps(steps: WebSyncStep[]) {
 const WEB_SYNC_PLANS: Record<WebSyncKind, WebSyncPlan> = {
 	timeline: {
 		label: "Home timeline",
-		accountAware: true,
+		accountAware: false,
 		run: (account) =>
 			Effect.gen(function* () {
 				const result = yield* syncHomeTimelineEffect({
@@ -189,7 +189,7 @@ const WEB_SYNC_PLANS: Record<WebSyncKind, WebSyncPlan> = {
 	},
 	dms: {
 		label: "Direct messages",
-		accountAware: true,
+		accountAware: false,
 		run: (account) =>
 			Effect.gen(function* () {
 				const result = yield* syncDirectMessagesViaCachedBirdEffect({

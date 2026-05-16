@@ -16,6 +16,7 @@ describe("SyncNowButton", () => {
 
 	afterEach(() => {
 		cleanup();
+		window.localStorage.clear();
 		vi.unstubAllGlobals();
 		vi.useRealTimers();
 	});
@@ -173,7 +174,7 @@ describe("SyncNowButton", () => {
 		});
 	});
 
-	it("posts the selected account id for timeline syncs", async () => {
+	it("keeps Bird-only syncs account-neutral", async () => {
 		const fetchMock = vi.fn(
 			async (_input: RequestInfo | URL, init?: RequestInit) => {
 				const body = JSON.parse(String(init?.body)) as {
@@ -228,22 +229,58 @@ describe("SyncNowButton", () => {
 			/>,
 		);
 
-		fireEvent.change(screen.getByLabelText("Sync account"), {
-			target: { value: "acct_studio" },
-		});
+		expect(screen.queryByLabelText("Sync account")).not.toBeInTheDocument();
 		fireEvent.click(screen.getByRole("button", { name: "Sync timeline" }));
 
 		await waitFor(() => {
 			expect(fetchMock).toHaveBeenCalledWith(
 				"/api/sync",
 				expect.objectContaining({
-					body: JSON.stringify({
-						kind: "timeline",
-						accountId: "acct_studio",
-					}),
+					body: JSON.stringify({ kind: "timeline" }),
 				}),
 			);
 		});
+	});
+
+	it("disables Bird-only syncs for a selected non-default account", () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal("fetch", fetchMock);
+		setStoredAccountId("acct_studio");
+
+		render(
+			<SyncNowButton
+				accounts={[
+					{
+						id: "acct_primary",
+						name: "Peter",
+						handle: "@steipete",
+						transport: "bird",
+						isDefault: 1,
+						createdAt: "2026-05-15T12:00:00.000Z",
+					},
+					{
+						id: "acct_studio",
+						name: "Studio",
+						handle: "@studio",
+						transport: "xurl",
+						isDefault: 0,
+						createdAt: "2026-05-15T12:00:00.000Z",
+					},
+				]}
+				kind="timeline"
+				label="Sync timeline"
+				onSynced={vi.fn()}
+			/>,
+		);
+
+		const button = screen.getByRole("button", {
+			name: "Sync timeline: default account only",
+		});
+		expect(button).toBeDisabled();
+		expect(screen.getByText("Switch to default to sync")).toBeInTheDocument();
+
+		fireEvent.click(button);
+		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
 	it("surfaces sync failures", async () => {

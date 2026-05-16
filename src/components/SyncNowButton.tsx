@@ -4,7 +4,11 @@ import { postSync } from "#/lib/api-client";
 import type { AccountRecord } from "#/lib/types";
 import { cx, selectFieldClass } from "#/lib/ui";
 import type { WebSyncKind, WebSyncResponse } from "#/lib/web-sync";
-import { setStoredAccountId, useSelectedAccountId } from "./account-selection";
+import {
+	defaultAccountId as getDefaultAccountId,
+	setStoredAccountId,
+	useSelectedAccountId,
+} from "./account-selection";
 
 interface SyncNowButtonProps {
 	kind: WebSyncKind;
@@ -24,10 +28,20 @@ export function SyncNowButton({
 	const [error, setError] = useState<string | null>(null);
 	const globalAccountId = useSelectedAccountId(accounts);
 	const defaultAccountId = useMemo(
-		() => accounts.find((account) => account.isDefault)?.id ?? accounts[0]?.id,
+		() => getDefaultAccountId(accounts),
 		[accounts],
 	);
 	const accountId = globalAccountId ?? defaultAccountId;
+	const accountAwareSync = kind !== "timeline" && kind !== "dms";
+	const birdOnlyWrongAccount =
+		!accountAwareSync &&
+		accountId !== undefined &&
+		defaultAccountId !== undefined &&
+		accountId !== defaultAccountId;
+	const disabled = syncing || birdOnlyWrongAccount;
+	const statusMessage = birdOnlyWrongAccount
+		? "Switch to default to sync"
+		: (error ?? message ?? "");
 
 	function selectAccount(accountId: string) {
 		setStoredAccountId(accountId);
@@ -38,7 +52,10 @@ export function SyncNowButton({
 		setError(null);
 		setMessage(null);
 		try {
-			const data = await postSync(kind, accountId);
+			const data = await postSync(
+				kind,
+				accountAwareSync ? accountId : undefined,
+			);
 			if (!data.ok) throw new Error(data.summary);
 			setMessage(data.summary);
 			onSynced(data);
@@ -51,7 +68,7 @@ export function SyncNowButton({
 
 	return (
 		<div className="flex shrink-0 items-center gap-2">
-			{accounts.length > 1 ? (
+			{accountAwareSync && accounts.length > 1 ? (
 				<select
 					aria-label="Sync account"
 					className={cx(selectFieldClass, "h-9 w-[132px]")}
@@ -69,11 +86,20 @@ export function SyncNowButton({
 			<button
 				type="button"
 				className={cx(
-					"inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--bg)] px-3 text-[13px] font-semibold text-[var(--ink)] transition-[background,border-color,color,transform] duration-150 hover:border-[color:color-mix(in_srgb,var(--accent)_45%,var(--line))] hover:bg-[var(--accent-soft)] hover:text-[var(--accent)] active:scale-[0.98] disabled:cursor-wait disabled:opacity-65",
+					"inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--bg)] px-3 text-[13px] font-semibold text-[var(--ink)] transition-[background,border-color,color,transform] duration-150 hover:border-[color:color-mix(in_srgb,var(--accent)_45%,var(--line))] hover:bg-[var(--accent-soft)] hover:text-[var(--accent)] active:scale-[0.98] disabled:opacity-65",
 					syncing && "text-[var(--ink-soft)]",
+					birdOnlyWrongAccount
+						? "disabled:cursor-not-allowed"
+						: "disabled:cursor-wait",
 				)}
-				aria-label={syncing ? `${label}: syncing` : label}
-				disabled={syncing}
+				aria-label={
+					birdOnlyWrongAccount
+						? `${label}: default account only`
+						: syncing
+							? `${label}: syncing`
+							: label
+				}
+				disabled={disabled}
 				onClick={syncNow}
 			>
 				<RefreshCw
@@ -91,7 +117,7 @@ export function SyncNowButton({
 				)}
 				role="status"
 			>
-				{error ?? message ?? ""}
+				{statusMessage}
 			</span>
 		</div>
 	);
