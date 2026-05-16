@@ -16,6 +16,7 @@
 - Link raw `@handle` mentions in archived timeline text and render retweets as embedded original tweets with compact repost attribution.
 - Remove the duplicate inline sync account picker now that the global web account switcher controls manual sync account state, and move the theme toggle out of the sidebar footer so the account switcher stays anchored at the bottom.
 - Move the one-button theme toggle above the sidebar account picker so the bottom controls align with the active-account avatar.
+- Hide unresolved `t.co` placeholders and duplicate preview cards on media tweets, and let single-image media render in a natural image-sized frame.
 
 ## 0.5.1 - 2026-05-15
 

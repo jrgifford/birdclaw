@@ -79,6 +79,29 @@ describe("TweetMediaGrid", () => {
 		);
 	});
 
+	it("uses a natural single-image frame instead of the full grid shell", () => {
+		const { container } = render(
+			<TweetMediaGrid
+				items={[
+					{
+						url: "https://example.com/tall.jpg",
+						type: "image",
+						altText: "Tall screenshot",
+						width: 768,
+						height: 1600,
+					},
+				]}
+			/>,
+		);
+
+		expect(container.firstChild).toHaveClass("tweet-media-single");
+		expect(container.firstChild).not.toHaveClass("tweet-media-grid");
+		expect(screen.getByAltText("Tall screenshot")).toHaveAttribute(
+			"width",
+			"768",
+		);
+	});
+
 	it("opens video media inline", () => {
 		const { container } = render(
 			<TweetMediaGrid

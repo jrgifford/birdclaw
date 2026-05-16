@@ -395,6 +395,89 @@ describe("TimelineCard", () => {
 		).toBeNull();
 	});
 
+	it("hides unresolved t.co text and preview cards when media is attached", () => {
+		render(
+			<TimelineCard
+				item={{
+					...item,
+					id: "tweet_short_media",
+					text: "t.co/QbCcJuNZjo",
+					entities: {
+						urls: [
+							{
+								url: "https://t.co/QbCcJuNZjo",
+								expandedUrl: "https://t.co/QbCcJuNZjo",
+								displayUrl: "t.co/QbCcJuNZjo",
+								start: 0,
+								end: 15,
+							},
+						],
+					},
+					media: [
+						{
+							url: "https://pbs.twimg.com/media/tall.jpg",
+							type: "image",
+							altText: "Tall screenshot",
+							width: 768,
+							height: 1600,
+						},
+					],
+					mediaCount: 1,
+					replyToTweet: null,
+					quotedTweet: null,
+				}}
+				onReply={vi.fn()}
+			/>,
+		);
+
+		expect(screen.getByAltText("Tall screenshot")).toBeInTheDocument();
+		expect(screen.queryByText("t.co/QbCcJuNZjo")).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole("link", { name: /t\.co\/QbCcJuNZjo/ }),
+		).toBeNull();
+	});
+
+	it("keeps unresolved t.co links when the media tweet has other text", () => {
+		render(
+			<TimelineCard
+				item={{
+					...item,
+					id: "tweet_short_media_caption",
+					text: "Read this https://t.co/article",
+					entities: {
+						urls: [
+							{
+								url: "https://t.co/article",
+								expandedUrl: "https://t.co/article",
+								displayUrl: "t.co/article",
+								start: 10,
+								end: 30,
+							},
+						],
+					},
+					media: [
+						{
+							url: "https://pbs.twimg.com/media/article-card.jpg",
+							type: "image",
+							altText: "Article image",
+						},
+					],
+					mediaCount: 1,
+					replyToTweet: null,
+					quotedTweet: null,
+				}}
+				onReply={vi.fn()}
+			/>,
+		);
+
+		expect(screen.getByText("Read this")).toBeInTheDocument();
+		expect(screen.getByRole("link", { name: "t.co/article" })).toHaveAttribute(
+			"href",
+			"https://t.co/article",
+		);
+		expect(screen.getByAltText("Article image")).toBeInTheDocument();
+	});
+
 	it("tolerates archived media URL entities without display URLs", () => {
 		render(
 			<TimelineCard

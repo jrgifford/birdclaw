@@ -83,6 +83,64 @@ function isMediaUrlEntity(
 	return false;
 }
 
+function isShortUrl(value: string | null | undefined) {
+	if (!value) return false;
+	try {
+		const candidate = value.includes("://") ? value : `https://${value}`;
+		const parsed = new URL(candidate);
+		return parsed.hostname.replace(/^www\./, "") === "t.co";
+	} catch {
+		return false;
+	}
+}
+
+function isUnresolvedShortUrlEntity(entry: TweetUrlEntity) {
+	if (isShortUrl(entry.expandedUrl)) return true;
+	if (entry.expandedUrl) return false;
+	if (isShortUrl(entry.displayUrl)) return true;
+	return !entry.displayUrl && isShortUrl(entry.url);
+}
+
+function unresolvedShortUrlRanges(entities: TweetEntities) {
+	return (entities.urls ?? [])
+		.filter(isUnresolvedShortUrlEntity)
+		.map((entry) => ({ start: entry.start, end: entry.end }));
+}
+
+function textOutsideRanges(
+	text: string,
+	ranges: Array<{ start: number; end: number }>,
+) {
+	let cursor = 0;
+	let output = "";
+	for (const range of [...ranges].sort(
+		(left, right) => left.start - right.start,
+	)) {
+		if (
+			range.start < cursor ||
+			range.end <= range.start ||
+			range.end > text.length
+		) {
+			continue;
+		}
+		output += text.slice(cursor, range.start);
+		cursor = range.end;
+	}
+	output += text.slice(cursor);
+	return output;
+}
+
+function shouldHideUnresolvedShortUrls(
+	text: string,
+	entities: TweetEntities,
+	mediaUrls: Set<string>,
+) {
+	if (mediaUrls.size === 0) return false;
+	const ranges = unresolvedShortUrlRanges(entities);
+	if (ranges.length === 0) return false;
+	return textOutsideRanges(text, ranges).trim().length === 0;
+}
+
 function isOwnStatusMediaUrl(
 	value: string | null | undefined,
 	tweetId: string,
@@ -108,13 +166,21 @@ function getVisibleEntities(
 	entities: TweetEntities,
 	media: TweetMediaItem[],
 	tweetId: string,
+	text: string,
 ) {
 	const mediaUrls = getMediaUrlSet(media);
 	if (mediaUrls.size === 0) return entities;
+	const hideUnresolvedShortUrls = shouldHideUnresolvedShortUrls(
+		text,
+		entities,
+		mediaUrls,
+	);
 	return {
 		...entities,
 		urls: (entities.urls ?? []).filter(
-			(entry) => !isMediaUrlEntity(entry, mediaUrls, tweetId),
+			(entry) =>
+				!isMediaUrlEntity(entry, mediaUrls, tweetId) &&
+				!(hideUnresolvedShortUrls && isUnresolvedShortUrlEntity(entry)),
 		),
 	};
 }
@@ -123,11 +189,21 @@ function getHiddenMediaUrlRanges(
 	entities: TweetEntities,
 	media: TweetMediaItem[],
 	tweetId: string,
+	text: string,
 ) {
 	const mediaUrls = getMediaUrlSet(media);
 	if (mediaUrls.size === 0) return [];
+	const hideUnresolvedShortUrls = shouldHideUnresolvedShortUrls(
+		text,
+		entities,
+		mediaUrls,
+	);
 	return (entities.urls ?? [])
-		.filter((entry) => isMediaUrlEntity(entry, mediaUrls, tweetId))
+		.filter(
+			(entry) =>
+				isMediaUrlEntity(entry, mediaUrls, tweetId) ||
+				(hideUnresolvedShortUrls && isUnresolvedShortUrlEntity(entry)),
+		)
 		.map((entry) => ({ start: entry.start, end: entry.end }));
 }
 
@@ -162,11 +238,13 @@ export function TimelineCard({
 		item.entities,
 		item.media,
 		item.id,
+		item.text,
 	);
 	const hiddenMediaUrlRanges = getHiddenMediaUrlRanges(
 		item.entities,
 		item.media,
 		item.id,
+		item.text,
 	);
 	const hasConversation = Boolean(item.replyToTweet || item.replyToId);
 
