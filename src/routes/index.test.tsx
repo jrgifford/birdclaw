@@ -84,6 +84,48 @@ describe("home route", () => {
 		});
 	});
 
+	it("shows reply transport errors without dropping the timeline", async () => {
+		const fetchMock = vi.fn(
+			async (input: RequestInfo | URL, init?: RequestInit) => {
+				const url = String(input);
+				if (url.endsWith("/api/status")) {
+					return new Response(
+						JSON.stringify({
+							stats: { home: 3, mentions: 2, dms: 4, needsReply: 2, inbox: 4 },
+							transport: { statusText: "local" },
+							accounts: [],
+							archives: [],
+						}),
+					);
+				}
+				if (url.includes("/api/query")) {
+					return new Response(
+						JSON.stringify({
+							resource: "home",
+							items: [{ id: "tweet_1", text: "Ship it" }],
+						}),
+					);
+				}
+				if (url.endsWith("/api/action") && init?.method === "POST") {
+					return new Response(JSON.stringify({ message: "reply denied" }), {
+						status: 500,
+					});
+				}
+				throw new Error(`Unexpected fetch ${url}`);
+			},
+		);
+		vi.stubGlobal("fetch", fetchMock);
+		vi.spyOn(window, "prompt").mockReturnValue("On it.");
+
+		render(<HomeRoute />);
+
+		expect(await screen.findByText("Ship it")).toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "Ship it" }));
+
+		expect(await screen.findByText("reply denied")).toBeInTheDocument();
+		expect(screen.getByText("Ship it")).toBeInTheDocument();
+	});
+
 	it("trims search terms, changes reply filters, and ignores blank replies", async () => {
 		const queryUrls: URL[] = [];
 		const fetchMock = vi.fn(

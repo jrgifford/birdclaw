@@ -1198,6 +1198,75 @@ describe("birdclaw queries", () => {
 		).rejects.toThrow("No local author profile for account");
 	});
 
+	it("does not persist tweet writes when transport fails", async () => {
+		setupTempHome();
+		const db = getNativeDb();
+		mocks.postViaXurl.mockRejectedValueOnce(new Error("post failed"));
+		mocks.replyViaXurl.mockRejectedValueOnce(new Error("reply failed"));
+
+		await expect(createPost("acct_primary", "do not keep")).rejects.toThrow(
+			"post failed",
+		);
+		await expect(
+			createTweetReply("acct_primary", "tweet_004", "do not reply"),
+		).rejects.toThrow("reply failed");
+		mocks.postViaXurl.mockResolvedValueOnce({
+			ok: false,
+			output: "post denied",
+		});
+		mocks.replyViaXurl.mockResolvedValueOnce({
+			ok: false,
+			output: "reply denied",
+		});
+
+		await expect(
+			createPost("acct_primary", "do not keep false"),
+		).rejects.toThrow("post denied");
+		await expect(
+			createTweetReply("acct_primary", "tweet_004", "do not reply false"),
+		).rejects.toThrow("reply denied");
+
+		expect(
+			db
+				.prepare("select count(*) as count from tweets where text like ?")
+				.get("do not%") as { count: number },
+		).toEqual({ count: 0 });
+		expect(
+			db
+				.prepare(
+					"select count(*) as count from tweet_actions where body like ?",
+				)
+				.get("do not%") as { count: number },
+		).toEqual({ count: 0 });
+		expect(
+			db.prepare("select is_replied from tweets where id = ?").get("tweet_004"),
+		).toEqual({ is_replied: 0 });
+	});
+
+	it("does not publish tweet writes when local persistence cannot be staged", async () => {
+		setupTempHome();
+		const db = getNativeDb();
+		db.exec("drop table tweet_actions");
+
+		await expect(
+			createPost("acct_primary", "do not publish post"),
+		).rejects.toThrow("tweet_actions");
+		await expect(
+			createTweetReply("acct_primary", "tweet_004", "do not publish reply"),
+		).rejects.toThrow("tweet_actions");
+
+		expect(mocks.postViaXurl).not.toHaveBeenCalled();
+		expect(mocks.replyViaXurl).not.toHaveBeenCalled();
+		expect(
+			db
+				.prepare("select count(*) as count from tweets where text like ?")
+				.get("do not publish%") as { count: number },
+		).toEqual({ count: 0 });
+		expect(
+			db.prepare("select is_replied from tweets where id = ?").get("tweet_004"),
+		).toEqual({ is_replied: 0 });
+	});
+
 	it("creates tweet replies and flips the original item to replied", async () => {
 		setupTempHome();
 
@@ -1257,6 +1326,65 @@ describe("birdclaw queries", () => {
 			unread_count: 0,
 		});
 		expect(mocks.dmViaXurl).toHaveBeenCalledWith("amelia", "Send it over.");
+	});
+
+	it("does not persist dm replies when transport fails", async () => {
+		setupTempHome();
+		const db = getNativeDb();
+		mocks.dmViaXurl.mockRejectedValueOnce(new Error("dm failed"));
+
+		await expect(createDmReply("dm_003", "do not dm")).rejects.toThrow(
+			"dm failed",
+		);
+		mocks.dmViaXurl.mockResolvedValueOnce({
+			ok: false,
+			output: "dm denied",
+		});
+
+		await expect(createDmReply("dm_003", "do not dm false")).rejects.toThrow(
+			"dm denied",
+		);
+
+		expect(
+			db
+				.prepare(
+					"select count(*) as count from dm_messages where text like ? and direction = 'outbound'",
+				)
+				.get("do not dm%") as { count: number },
+		).toEqual({ count: 0 });
+		expect(
+			db
+				.prepare(
+					"select needs_reply, unread_count from dm_conversations where id = ?",
+				)
+				.get("dm_003"),
+		).toEqual({ needs_reply: 1, unread_count: 2 });
+	});
+
+	it("does not publish dm replies when local persistence cannot be staged", async () => {
+		setupTempHome();
+		const db = getNativeDb();
+		db.exec("drop table dm_fts");
+
+		await expect(createDmReply("dm_003", "do not publish dm")).rejects.toThrow(
+			"dm_fts",
+		);
+
+		expect(mocks.dmViaXurl).not.toHaveBeenCalled();
+		expect(
+			db
+				.prepare(
+					"select count(*) as count from dm_messages where text = ? and direction = 'outbound'",
+				)
+				.get("do not publish dm") as { count: number },
+		).toEqual({ count: 0 });
+		expect(
+			db
+				.prepare(
+					"select needs_reply, unread_count from dm_conversations where id = ?",
+				)
+				.get("dm_003"),
+		).toEqual({ needs_reply: 1, unread_count: 2 });
 	});
 
 	it("rejects dm replies for missing conversations", async () => {

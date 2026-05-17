@@ -1862,39 +1862,102 @@ function getLocalAuthorProfileId(accountId: string) {
 	return row?.id;
 }
 
-export function createPostEffect(accountId: string, text: string) {
-	return Effect.gen(function* () {
-		const { tweetId } = yield* trySync(() => {
-			const db = getNativeDb();
-			const authorProfileId = getLocalAuthorProfileId(accountId);
-			if (!authorProfileId) {
-				throw new Error("No local author profile for account");
-			}
+let savepointCounter = 0;
 
-			const now = new Date().toISOString();
-			const tweetId = `tweet_${randomUUID()}`;
+function preflightWrite<T>(write: (db: Database) => T) {
+	const db = getNativeDb();
+	const savepoint = `__birdclaw_preflight_${++savepointCounter}`;
+	db.exec(`savepoint ${savepoint}`);
+	try {
+		const result = write(db);
+		db.exec(`rollback to ${savepoint}`);
+		db.exec(`release ${savepoint}`);
+		return result;
+	} catch (error) {
+		try {
+			db.exec(`rollback to ${savepoint}`);
+			db.exec(`release ${savepoint}`);
+		} catch {
+			// Preserve the original staging error; cleanup is best effort here.
+		}
+		throw error;
+	}
+}
 
-			db.prepare(
-				`
+function persistWrite<T>(write: (db: Database) => T) {
+	const db = getNativeDb();
+	return db.transaction(() => write(db))();
+}
+
+type PostDraft = {
+	actionId: string;
+	authorProfileId: string;
+	createdAt: string;
+	tweetId: string;
+};
+
+function preparePostDraft(accountId: string): PostDraft {
+	const authorProfileId = getLocalAuthorProfileId(accountId);
+	if (!authorProfileId) {
+		throw new Error("No local author profile for account");
+	}
+
+	return {
+		actionId: randomUUID(),
+		authorProfileId,
+		createdAt: new Date().toISOString(),
+		tweetId: `tweet_${randomUUID()}`,
+	};
+}
+
+function writePostDraft(
+	db: Database,
+	accountId: string,
+	text: string,
+	draft: PostDraft,
+) {
+	db.prepare(
+		`
     insert into tweets (
       id, account_id, author_profile_id, kind, text, created_at,
       is_replied, reply_to_id, like_count, media_count, bookmarked, liked
     ) values (?, ?, ?, 'home', ?, ?, 0, null, 0, 0, 0, 0)
     `,
-			).run(tweetId, accountId, authorProfileId, text, now);
+	).run(draft.tweetId, accountId, draft.authorProfileId, text, draft.createdAt);
 
-			db.prepare("insert into tweets_fts (tweet_id, text) values (?, ?)").run(
-				tweetId,
-				text,
-			);
-			db.prepare(
-				"insert into tweet_actions (id, account_id, tweet_id, kind, body, created_at) values (?, ?, ?, ?, ?, ?)",
-			).run(randomUUID(), accountId, tweetId, "post", text, now);
-			return { tweetId };
+	db.prepare("insert into tweets_fts (tweet_id, text) values (?, ?)").run(
+		draft.tweetId,
+		text,
+	);
+	db.prepare(
+		"insert into tweet_actions (id, account_id, tweet_id, kind, body, created_at) values (?, ?, ?, ?, ?, ?)",
+	).run(
+		draft.actionId,
+		accountId,
+		draft.tweetId,
+		"post",
+		text,
+		draft.createdAt,
+	);
+}
+
+export function createPostEffect(accountId: string, text: string) {
+	return Effect.gen(function* () {
+		const draft = yield* trySync(() => {
+			const postDraft = preparePostDraft(accountId);
+			preflightWrite((db) => writePostDraft(db, accountId, text, postDraft));
+			return postDraft;
 		});
 
 		const transport = yield* postViaXurlEffect(text);
-		return { ok: true, transport, tweetId };
+		if (!transport.ok) {
+			return yield* Effect.fail(new Error(transport.output || "post failed"));
+		}
+		yield* trySync(() =>
+			persistWrite((db) => writePostDraft(db, accountId, text, draft)),
+		);
+
+		return { ok: true, transport, tweetId: draft.tweetId };
 	});
 }
 
@@ -1907,39 +1970,58 @@ export function createTweetReplyEffect(
 	tweetId: string,
 	text: string,
 ) {
-	return Effect.gen(function* () {
-		const { replyId } = yield* trySync(() => {
-			const db = getNativeDb();
-			const authorProfileId = getLocalAuthorProfileId(accountId);
-			if (!authorProfileId) {
-				throw new Error("No local author profile for account");
-			}
+	type ReplyDraft = PostDraft & { replyId: string };
 
-			const now = new Date().toISOString();
-			db.prepare("update tweets set is_replied = 1 where id = ?").run(tweetId);
+	function prepareReplyDraft(): ReplyDraft {
+		const postDraft = preparePostDraft(accountId);
+		return {
+			...postDraft,
+			replyId: postDraft.tweetId,
+		};
+	}
 
-			const replyId = `tweet_${randomUUID()}`;
-			db.prepare(
-				`
+	function writeReplyDraft(db: Database, draft: ReplyDraft) {
+		db.prepare("update tweets set is_replied = 1 where id = ?").run(tweetId);
+
+		db.prepare(
+			`
     insert into tweets (
       id, account_id, author_profile_id, kind, text, created_at,
       is_replied, reply_to_id, like_count, media_count, bookmarked, liked
     ) values (?, ?, ?, 'home', ?, ?, 1, ?, 0, 0, 0, 0)
     `,
-			).run(replyId, accountId, authorProfileId, text, now, tweetId);
-			db.prepare("insert into tweets_fts (tweet_id, text) values (?, ?)").run(
-				replyId,
-				text,
-			);
+		).run(
+			draft.replyId,
+			accountId,
+			draft.authorProfileId,
+			text,
+			draft.createdAt,
+			tweetId,
+		);
+		db.prepare("insert into tweets_fts (tweet_id, text) values (?, ?)").run(
+			draft.replyId,
+			text,
+		);
 
-			db.prepare(
-				"insert into tweet_actions (id, account_id, tweet_id, kind, body, created_at) values (?, ?, ?, ?, ?, ?)",
-			).run(randomUUID(), accountId, tweetId, "reply", text, now);
-			return { replyId };
+		db.prepare(
+			"insert into tweet_actions (id, account_id, tweet_id, kind, body, created_at) values (?, ?, ?, ?, ?, ?)",
+		).run(draft.actionId, accountId, tweetId, "reply", text, draft.createdAt);
+	}
+
+	return Effect.gen(function* () {
+		const draft = yield* trySync(() => {
+			const replyDraft = prepareReplyDraft();
+			preflightWrite((db) => writeReplyDraft(db, replyDraft));
+			return replyDraft;
 		});
 
 		const transport = yield* replyViaXurlEffect(tweetId, text);
-		return { ok: true, transport, replyId };
+		if (!transport.ok) {
+			return yield* Effect.fail(new Error(transport.output || "reply failed"));
+		}
+		yield* trySync(() => persistWrite((db) => writeReplyDraft(db, draft)));
+
+		return { ok: true, transport, replyId: draft.replyId };
 	});
 }
 
@@ -1953,8 +2035,7 @@ export function createTweetReply(
 
 export function createDmReplyEffect(conversationId: string, text: string) {
 	return Effect.gen(function* () {
-		const { handle, outboundId } = yield* trySync(() => {
-			const db = getNativeDb();
+		const draft = yield* trySync(() => {
 			const conversation = getConversationThread(conversationId);
 			if (!conversation) {
 				throw new Error("Conversation not found");
@@ -1966,29 +2047,65 @@ export function createDmReplyEffect(conversationId: string, text: string) {
 				throw new Error("No local author profile for account");
 			}
 
-			const now = new Date().toISOString();
-			const outboundId = `msg_${randomUUID()}`;
-
-			db.prepare(
-				`
+			const dmDraft = {
+				authorProfileId,
+				createdAt: new Date().toISOString(),
+				handle: conversation.conversation.participant.handle,
+				outboundId: `msg_${randomUUID()}`,
+			};
+			preflightWrite((db) => {
+				db.prepare(
+					`
     insert into dm_messages (
       id, conversation_id, sender_profile_id, text, created_at, direction, is_replied, media_count
     ) values (?, ?, ?, ?, ?, 'outbound', 1, 0)
     `,
-			).run(outboundId, conversationId, authorProfileId, text, now);
-			db.prepare("insert into dm_fts (message_id, text) values (?, ?)").run(
-				outboundId,
-				text,
-			);
+				).run(
+					dmDraft.outboundId,
+					conversationId,
+					dmDraft.authorProfileId,
+					text,
+					dmDraft.createdAt,
+				);
+				db.prepare("insert into dm_fts (message_id, text) values (?, ?)").run(
+					dmDraft.outboundId,
+					text,
+				);
 
-			refreshDmConversationState(db, conversationId, now);
-			return {
-				handle: conversation.conversation.participant.handle,
-				outboundId,
-			};
+				refreshDmConversationState(db, conversationId, dmDraft.createdAt);
+			});
+			return dmDraft;
 		});
-		const transport = yield* dmViaXurlEffect(handle, text);
-		return { ok: true, transport, messageId: outboundId };
+
+		const transport = yield* dmViaXurlEffect(draft.handle, text);
+		if (!transport.ok) {
+			return yield* Effect.fail(new Error(transport.output || "dm failed"));
+		}
+		yield* trySync(() =>
+			persistWrite((db) => {
+				db.prepare(
+					`
+    insert into dm_messages (
+      id, conversation_id, sender_profile_id, text, created_at, direction, is_replied, media_count
+    ) values (?, ?, ?, ?, ?, 'outbound', 1, 0)
+    `,
+				).run(
+					draft.outboundId,
+					conversationId,
+					draft.authorProfileId,
+					text,
+					draft.createdAt,
+				);
+				db.prepare("insert into dm_fts (message_id, text) values (?, ?)").run(
+					draft.outboundId,
+					text,
+				);
+
+				refreshDmConversationState(db, conversationId, draft.createdAt);
+			}),
+		);
+
+		return { ok: true, transport, messageId: draft.outboundId };
 	});
 }
 

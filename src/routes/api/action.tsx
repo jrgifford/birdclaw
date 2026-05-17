@@ -28,6 +28,21 @@ function parseActionsTransport(
 		: undefined;
 }
 
+function actionErrorMessage(error: unknown) {
+	if (
+		typeof error === "object" &&
+		error !== null &&
+		"cause" in error &&
+		error.cause instanceof Error
+	) {
+		return error.cause.message;
+	}
+	if (error instanceof Error) {
+		return error.message;
+	}
+	return String(error);
+}
+
 export const Route = createFileRoute("/api/action")({
 	server: {
 		handlers: {
@@ -105,7 +120,19 @@ export const Route = createFileRoute("/api/action")({
 						}
 
 						return jsonResponse(result);
-					}),
+					}).pipe(
+						Effect.catchAll((error) =>
+							Effect.succeed(
+								jsonResponse(
+									{
+										ok: false,
+										message: actionErrorMessage(error),
+									},
+									{ status: 500 },
+								),
+							),
+						),
+					),
 				),
 		},
 	},

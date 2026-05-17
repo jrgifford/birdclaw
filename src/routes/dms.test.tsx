@@ -133,6 +133,68 @@ describe("dms route", () => {
 		});
 	});
 
+	it("restores dm draft and shows transport errors", async () => {
+		const fetchMock = vi.fn(
+			async (input: RequestInfo | URL, init?: RequestInit) => {
+				const url = String(input);
+				if (url.endsWith("/api/status")) {
+					return new Response(
+						JSON.stringify({
+							stats: { home: 3, mentions: 1, dms: 4, needsReply: 2, inbox: 3 },
+							transport: { statusText: "local" },
+							accounts: [],
+							archives: [],
+						}),
+					);
+				}
+				if (url.includes("/api/query")) {
+					return new Response(
+						JSON.stringify({
+							resource: "dms",
+							items: [
+								{
+									id: "dm_1",
+									title: "Sam Altman",
+									accountId: "acct_primary",
+									accountHandle: "@steipete",
+								},
+							],
+							selectedConversation: {
+								conversation: {
+									id: "dm_1",
+									title: "Sam Altman",
+									accountId: "acct_primary",
+									accountHandle: "@steipete",
+								},
+								messages: [],
+							},
+						}),
+					);
+				}
+				if (url.endsWith("/api/action") && init?.method === "POST") {
+					return new Response(JSON.stringify({ message: "dm denied" }), {
+						status: 500,
+					});
+				}
+				throw new Error(`Unexpected fetch ${url}`);
+			},
+		);
+		vi.stubGlobal("fetch", fetchMock);
+
+		render(<DmsRoute />);
+
+		expect(await screen.findByText("Sam Altman")).toBeInTheDocument();
+		fireEvent.change(screen.getByLabelText("draft"), {
+			target: { value: "Need details" },
+		});
+		fireEvent.click(screen.getByRole("button", { name: "send dm" }));
+
+		expect(await screen.findByText("dm denied")).toBeInTheDocument();
+		expect((screen.getByLabelText("draft") as HTMLInputElement).value).toBe(
+			"Need details",
+		);
+	});
+
 	it("keeps the selected conversation visible while refreshing it", async () => {
 		let queryCalls = 0;
 		let releaseRefresh: (() => void) | undefined;

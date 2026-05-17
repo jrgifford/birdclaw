@@ -34,6 +34,7 @@ import {
 	tabStripClass,
 	textFieldClass,
 	textFieldShortClass,
+	timestampClass,
 } from "#/lib/ui";
 
 export const Route = createFileRoute("/dms")({
@@ -65,6 +66,7 @@ function DmsRoute() {
 	const [refreshTick, setRefreshTick] = useState(0);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	const [replyError, setReplyError] = useState<string | null>(null);
 	const selectedAccountId = useSelectedAccountId(meta?.accounts);
 
 	async function loadStatus() {
@@ -200,6 +202,7 @@ function DmsRoute() {
 		const previousMessages = messages;
 		const previousItems = items;
 
+		setReplyError(null);
 		setReplyDraft("");
 		setMessages((current) => [...current, optimisticMessage]);
 		setItems((current) =>
@@ -229,7 +232,7 @@ function DmsRoute() {
 			setReplyDraft(text);
 			setMessages(previousMessages);
 			setItems(previousItems);
-			throw error;
+			setReplyError(error instanceof Error ? error.message : "Reply failed");
 		}
 	}
 
@@ -313,6 +316,11 @@ function DmsRoute() {
 					})}
 				</div>
 			</header>
+			{replyError ? (
+				<p className={cx(timestampClass, "px-4 py-2 text-red-500")}>
+					{replyError}
+				</p>
+			) : null}
 
 			{loading && (items.length === 0 || switchingConversation) ? (
 				<FeedLoading

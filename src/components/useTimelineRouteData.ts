@@ -33,6 +33,7 @@ export function useTimelineRouteData({
 	const [items, setItems] = useState<TimelineItem[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	const [replyError, setReplyError] = useState<string | null>(null);
 	const [refreshTick, setRefreshTick] = useState(0);
 	const selectedAccountId = useSelectedAccountId(meta?.accounts);
 
@@ -121,14 +122,21 @@ export function useTimelineRouteData({
 		const text = window.prompt("Reply text");
 		if (!text?.trim()) return;
 
-		await postAction({
-			kind: "replyTweet",
-			accountId: selectedAccountId ?? "acct_primary",
-			tweetId,
-			text,
-		});
+		setReplyError(null);
+		try {
+			await postAction({
+				kind: "replyTweet",
+				accountId: selectedAccountId ?? "acct_primary",
+				tweetId,
+				text,
+			});
 
-		retry();
+			retry();
+		} catch (replyError) {
+			setReplyError(
+				replyError instanceof Error ? replyError.message : "Reply failed",
+			);
+		}
 	}
 
 	return {
@@ -136,6 +144,7 @@ export function useTimelineRouteData({
 		items,
 		loading,
 		error,
+		replyError,
 		retry,
 		refreshLocalView,
 		replyToTweet,

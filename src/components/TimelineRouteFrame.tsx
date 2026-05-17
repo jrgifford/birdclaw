@@ -25,6 +25,7 @@ import {
 	tabButtonClass,
 	tabButtonIndicatorClass,
 	tabStripClass,
+	timestampClass,
 } from "#/lib/ui";
 import { useTimelineRouteData } from "./useTimelineRouteData";
 
@@ -68,13 +69,21 @@ export function TimelineRouteFrame({
 	const [replyFilter, setReplyFilter] =
 		useState<ReplyFilter>(initialReplyFilter);
 	const [search, setSearch] = useState("");
-	const { meta, items, loading, error, retry, refreshLocalView, replyToTweet } =
-		useTimelineRouteData({
-			resource,
-			replyFilter,
-			search,
-			errorFallback,
-		});
+	const {
+		meta,
+		items,
+		loading,
+		error,
+		replyError,
+		retry,
+		refreshLocalView,
+		replyToTweet,
+	} = useTimelineRouteData({
+		resource,
+		replyFilter,
+		search,
+		errorFallback,
+	});
 	const subtitleText = useMemo(() => subtitle(meta), [meta, subtitle]);
 
 	return (
@@ -123,6 +132,11 @@ export function TimelineRouteFrame({
 					})}
 				</div>
 			</header>
+			{replyError ? (
+				<p className={cx(timestampClass, "px-4 py-2 text-red-500")}>
+					{replyError}
+				</p>
+			) : null}
 			<ConversationSurfaceScope>
 				<section className={feedClass}>
 					{loading ? (

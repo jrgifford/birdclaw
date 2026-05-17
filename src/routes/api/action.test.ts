@@ -16,40 +16,40 @@ const syncBlocksMock = vi.fn();
 vi.mock("#/lib/blocks", () => ({
 	addBlock: (...args: unknown[]) => addBlockMock(...args),
 	addBlockEffect: (...args: unknown[]) =>
-		Effect.promise(() => Promise.resolve(addBlockMock(...args))),
+		Effect.tryPromise(() => Promise.resolve(addBlockMock(...args))),
 	removeBlock: (...args: unknown[]) => removeBlockMock(...args),
 	removeBlockEffect: (...args: unknown[]) =>
-		Effect.promise(() => Promise.resolve(removeBlockMock(...args))),
+		Effect.tryPromise(() => Promise.resolve(removeBlockMock(...args))),
 	syncBlocks: (...args: unknown[]) => syncBlocksMock(...args),
 	syncBlocksEffect: (...args: unknown[]) =>
-		Effect.promise(() => Promise.resolve(syncBlocksMock(...args))),
+		Effect.tryPromise(() => Promise.resolve(syncBlocksMock(...args))),
 }));
 
 vi.mock("#/lib/queries", () => ({
 	createPost: (...args: unknown[]) => createPostMock(...args),
 	createPostEffect: (...args: unknown[]) =>
-		Effect.promise(() => Promise.resolve(createPostMock(...args))),
+		Effect.tryPromise(() => Promise.resolve(createPostMock(...args))),
 	createTweetReply: (...args: unknown[]) => createTweetReplyMock(...args),
 	createTweetReplyEffect: (...args: unknown[]) =>
-		Effect.promise(() => Promise.resolve(createTweetReplyMock(...args))),
+		Effect.tryPromise(() => Promise.resolve(createTweetReplyMock(...args))),
 	createDmReply: (...args: unknown[]) => createDmReplyMock(...args),
 	createDmReplyEffect: (...args: unknown[]) =>
-		Effect.promise(() => Promise.resolve(createDmReplyMock(...args))),
+		Effect.tryPromise(() => Promise.resolve(createDmReplyMock(...args))),
 }));
 
 vi.mock("#/lib/mutes", () => ({
 	addMute: (...args: unknown[]) => addMuteMock(...args),
 	addMuteEffect: (...args: unknown[]) =>
-		Effect.promise(() => Promise.resolve(addMuteMock(...args))),
+		Effect.tryPromise(() => Promise.resolve(addMuteMock(...args))),
 	removeMute: (...args: unknown[]) => removeMuteMock(...args),
 	removeMuteEffect: (...args: unknown[]) =>
-		Effect.promise(() => Promise.resolve(removeMuteMock(...args))),
+		Effect.tryPromise(() => Promise.resolve(removeMuteMock(...args))),
 }));
 
 vi.mock("#/lib/inbox", () => ({
 	scoreInbox: (...args: unknown[]) => scoreInboxMock(...args),
 	scoreInboxEffect: (...args: unknown[]) =>
-		Effect.promise(() => Promise.resolve(scoreInboxMock(...args))),
+		Effect.tryPromise(() => Promise.resolve(scoreInboxMock(...args))),
 }));
 
 import { Route } from "./action";
@@ -108,6 +108,27 @@ describe("api action route", () => {
 			"Ship more local software",
 		);
 		expect(await response.json()).toEqual({ ok: true, tweetId: "tweet_007" });
+	});
+
+	it("returns structured errors when actions fail", async () => {
+		createPostMock.mockRejectedValue(new Error("transport down"));
+
+		const response = await POST({
+			request: new Request("http://localhost/api/action", {
+				method: "POST",
+				body: JSON.stringify({
+					kind: "post",
+					accountId: "acct_studio",
+					text: "Will retry.",
+				}),
+			}),
+		});
+
+		expect(response.status).toBe(500);
+		expect(await response.json()).toEqual({
+			ok: false,
+			message: "transport down",
+		});
 	});
 
 	it("dispatches tweet reply actions", async () => {

@@ -3,6 +3,7 @@ import { Sparkles } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useSelectedAccountId } from "#/components/account-selection";
 import { InboxCard } from "#/components/InboxCard";
+import { postAction } from "#/lib/api-client";
 import type {
 	InboxItem,
 	InboxKind,
@@ -49,6 +50,7 @@ function InboxRoute() {
 	const [activeReplyId, setActiveReplyId] = useState<string | null>(null);
 	const [replyDraft, setReplyDraft] = useState("");
 	const [isSendingReply, setIsSendingReply] = useState(false);
+	const [replyError, setReplyError] = useState<string | null>(null);
 	const [stats, setStats] = useState<InboxResponse["stats"] | null>(null);
 	const selectedAccountId = useSelectedAccountId(meta?.accounts);
 
@@ -105,28 +107,27 @@ function InboxRoute() {
 	async function sendReply(item: InboxItem) {
 		if (!replyDraft.trim()) return;
 		setIsSendingReply(true);
+		setReplyError(null);
 		try {
-			await fetch("/api/action", {
-				method: "POST",
-				headers: { "content-type": "application/json" },
-				body: JSON.stringify(
-					item.entityKind === "dm"
-						? {
-								kind: "replyDm",
-								conversationId: item.entityId,
-								text: replyDraft,
-							}
-						: {
-								kind: "replyTweet",
-								accountId: item.accountId,
-								tweetId: item.entityId,
-								text: replyDraft,
-							},
-				),
-			});
+			await postAction(
+				item.entityKind === "dm"
+					? {
+							kind: "replyDm",
+							conversationId: item.entityId,
+							text: replyDraft,
+						}
+					: {
+							kind: "replyTweet",
+							accountId: item.accountId,
+							tweetId: item.entityId,
+							text: replyDraft,
+						},
+			);
 			setReplyDraft("");
 			setActiveReplyId(null);
 			setRefreshTick((value) => value + 1);
+		} catch (error) {
+			setReplyError(error instanceof Error ? error.message : "Reply failed");
 		} finally {
 			setIsSendingReply(false);
 		}
@@ -187,6 +188,11 @@ function InboxRoute() {
 					})}
 				</div>
 			</header>
+			{replyError ? (
+				<p className={cx(timestampClass, "px-4 py-2 text-red-500")}>
+					{replyError}
+				</p>
+			) : null}
 			<section className={feedClass}>
 				{items.length === 0 ? (
 					<div className={emptyStateClass}>Inbox clear.</div>
@@ -199,6 +205,7 @@ function InboxRoute() {
 						onReplyChange={setReplyDraft}
 						onReplySend={() => void sendReply(item)}
 						onReplyToggle={() => {
+							setReplyError(null);
 							if (activeReplyId === item.id) {
 								setActiveReplyId(null);
 								setReplyDraft("");

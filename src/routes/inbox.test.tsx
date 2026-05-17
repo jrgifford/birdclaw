@@ -183,4 +183,76 @@ describe("inbox route", () => {
 			);
 		});
 	});
+
+	it("keeps the inbox reply draft when transport fails", async () => {
+		const fetchMock = vi.fn(
+			async (input: RequestInfo | URL, init?: RequestInit) => {
+				const url = String(input);
+				if (url.endsWith("/api/status")) {
+					return new Response(
+						JSON.stringify({
+							stats: { home: 3, mentions: 1, dms: 4, needsReply: 2, inbox: 3 },
+							transport: { statusText: "local" },
+							accounts: [],
+							archives: [],
+						}),
+					);
+				}
+				if (url.includes("/api/inbox")) {
+					return new Response(
+						JSON.stringify({
+							items: [
+								{
+									id: "mention:tweet_1",
+									entityId: "tweet_1",
+									entityKind: "mention",
+									accountId: "acct_primary",
+									title: "Mention from Amelia",
+								},
+							],
+							stats: {
+								total: 1,
+								openai: 0,
+								heuristic: 1,
+							},
+						}),
+					);
+				}
+				if (url.endsWith("/api/action") && init?.method === "POST") {
+					return new Response(JSON.stringify({ message: "transport down" }), {
+						status: 500,
+					});
+				}
+				throw new Error(`Unexpected fetch ${url}`);
+			},
+		);
+		vi.stubGlobal("fetch", fetchMock);
+
+		render(<InboxRoute />);
+
+		expect(await screen.findByText("Mention from Amelia")).toBeInTheDocument();
+		fireEvent.click(
+			screen.getByRole("button", { name: "Mention from Amelia" }),
+		);
+		fireEvent.change(screen.getByLabelText("Reply mention:tweet_1"), {
+			target: { value: "Please do not drop this." },
+		});
+		fireEvent.click(
+			screen.getByRole("button", { name: "Send Mention from Amelia" }),
+		);
+
+		expect(await screen.findByText("transport down")).toBeInTheDocument();
+		expect(
+			(screen.getByLabelText("Reply mention:tweet_1") as HTMLInputElement)
+				.value,
+		).toBe("Please do not drop this.");
+
+		fireEvent.click(
+			screen.getByRole("button", { name: "Mention from Amelia" }),
+		);
+
+		await waitFor(() => {
+			expect(screen.queryByText("transport down")).toBeNull();
+		});
+	});
 });
