@@ -1664,7 +1664,8 @@ backupCommand
 program
 	.command("serve")
 	.description("Run the local web app")
-	.action(async () => {
+	.option("--host <host>", "Host to bind to", "127.0.0.1")
+	.action(async (options: { host: string }) => {
 		await autoUpdateBeforeRead();
 		const child = spawn(
 			process.execPath,
@@ -1672,7 +1673,7 @@ program
 				"node_modules/vite/bin/vite.js",
 				"dev",
 				"--host",
-				"127.0.0.1",
+				options.host,
 				"--port",
 				"3000",
 			],

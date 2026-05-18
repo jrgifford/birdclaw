@@ -260,11 +260,12 @@ birdclaw backup import ~/Projects/backup-birdclaw --json
 Start the app:
 
 ```bash
-birdclaw serve
+birdclaw serve [--host <host>]
 ```
 
 `birdclaw serve` binds the dev server to `127.0.0.1` and enables local
-loopback web APIs without a token. Remote access through a trusted private proxy
+loopback web APIs without a token. Pass `--host` to bind to a different address
+(e.g. a Tailscale hostname). Remote access through a trusted private proxy
 requires `BIRDCLAW_ALLOW_REMOTE_WEB=1`. To require an app-level token too, set
 `BIRDCLAW_WEB_TOKEN` and send it as `x-birdclaw-token` or a `birdclaw_token`
 cookie.
