@@ -63,6 +63,7 @@ const DmsRoute = Route.options.component as ComponentType;
 describe("dms route", () => {
 	beforeEach(() => {
 		vi.restoreAllMocks();
+		window.localStorage.clear();
 	});
 
 	afterEach(() => {
@@ -79,7 +80,20 @@ describe("dms route", () => {
 						JSON.stringify({
 							stats: { home: 3, mentions: 1, dms: 4, needsReply: 2, inbox: 3 },
 							transport: { statusText: "local" },
-							accounts: [],
+							accounts: [
+								{
+									id: "acct_primary",
+									handle: "@steipete",
+									name: "Peter",
+									isDefault: true,
+								},
+								{
+									id: "acct_openclaw",
+									handle: "@openclaw",
+									name: "OpenClaw",
+									isDefault: false,
+								},
+							],
 							archives: [],
 						}),
 					);
@@ -115,10 +129,18 @@ describe("dms route", () => {
 			},
 		);
 		vi.stubGlobal("fetch", fetchMock);
+		window.localStorage.setItem("birdclaw:selected-account-id", "acct_primary");
 
 		render(<DmsRoute />);
 
 		expect(await screen.findByText("Sam Altman")).toBeInTheDocument();
+		await waitFor(() => {
+			const latestQuery = fetchMock.mock.calls
+				.map(([input]) => String(input))
+				.filter((url) => url.includes("/api/query"))
+				.at(-1);
+			expect(latestQuery).toContain("account=acct_primary");
+		});
 		const sendButton = await screen.findByRole("button", { name: "send dm" });
 		fireEvent.change(screen.getByLabelText("draft"), {
 			target: { value: "Need details" },
@@ -540,6 +562,7 @@ describe("dms route", () => {
 
 		await waitFor(() => {
 			expect(queryUrls.at(-1)?.searchParams.get("inbox")).toBe("requests");
+			expect(queryUrls.at(-1)?.searchParams.get("account")).toBeNull();
 		});
 
 		fireEvent.click(screen.getByRole("button", { name: "Sync DMs" }));

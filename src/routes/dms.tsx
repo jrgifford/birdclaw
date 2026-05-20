@@ -102,7 +102,7 @@ function DmsRoute() {
 		url.searchParams.set("minInfluenceScore", minInfluenceScore);
 		url.searchParams.set("refresh", String(refreshTick));
 		url.searchParams.set("sort", sort);
-		if (selectedAccountId) {
+		if (selectedAccountId && inboxFilter !== "requests") {
 			url.searchParams.set("account", selectedAccountId);
 		}
 		if (selectedConversationId) {
