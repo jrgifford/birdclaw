@@ -86,7 +86,7 @@ export function DmWorkspace({
 		: "No conversation selected";
 
 	return (
-		<section className={dmShellClass}>
+		<section aria-label="DM workspace" className={dmShellClass}>
 			<aside className={dmListClass}>
 				{conversations.length === 0 ? (
 					<BirdclawEmpty

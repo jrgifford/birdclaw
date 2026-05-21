@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ThemeProvider } from "#/lib/theme";
 
+const routerState = vi.hoisted(() => ({ path: "/inbox" }));
+
 vi.mock("@tanstack/react-router", () => ({
 	Link: ({
 		children,
@@ -23,7 +25,7 @@ vi.mock("@tanstack/react-router", () => ({
 		select,
 	}: {
 		select: (state: { location: { pathname: string } }) => string;
-	}) => select({ location: { pathname: "/inbox" } }),
+	}) => select({ location: { pathname: routerState.path } }),
 }));
 
 vi.mock("./AccountSwitcher", () => ({
@@ -35,6 +37,7 @@ vi.mock("./AccountSwitcher", () => ({
 import { AppNav } from "./AppNav";
 
 afterEach(() => {
+	routerState.path = "/inbox";
 	cleanup();
 });
 
@@ -77,5 +80,23 @@ describe("AppNav", () => {
 		const accountSwitcher = screen.getByTestId("account-switcher");
 
 		expect(accountSwitcher).toContainElement(themeButton);
+	});
+
+	it("uses icon-rail chrome when compact", () => {
+		routerState.path = "/dms";
+		render(
+			<ThemeProvider>
+				<AppNav compact />
+			</ThemeProvider>,
+		);
+
+		expect(screen.getByRole("link", { name: "DMs" })).toHaveClass(
+			"nav-link-active",
+		);
+		expect(screen.getByRole("link", { name: "DMs" })).toHaveClass(
+			"justify-center",
+		);
+		expect(screen.getByText("birdclaw").parentElement).toHaveClass("sr-only");
+		expect(screen.getByText("DMs")).toHaveClass("sr-only");
 	});
 });

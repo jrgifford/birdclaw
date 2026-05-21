@@ -57,6 +57,9 @@ describe("DmWorkspace", () => {
 			/>,
 		);
 
+		expect(screen.getByRole("region", { name: "DM workspace" })).toHaveClass(
+			"min-[1360px]:grid-cols-[400px_minmax(0,1fr)]",
+		);
 		expect(screen.getAllByText("Sam Altman").length).toBeGreaterThan(1);
 		expect(screen.getByText("Working on AGI")).toBeInTheDocument();
 		expect(screen.queryByText("sender context")).not.toBeInTheDocument();

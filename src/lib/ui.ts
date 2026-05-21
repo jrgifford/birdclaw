@@ -9,8 +9,14 @@ export const bodyClass =
 export const siteShellClass =
 	"mx-auto flex min-h-screen w-full max-w-[1280px] gap-0";
 
+export const siteShellDmClass =
+	"mx-auto flex min-h-screen w-full max-w-[1680px] gap-0";
+
 export const sidebarShellClass =
 	"sticky top-0 z-30 flex h-screen w-[72px] shrink-0 flex-col justify-between border-r border-[var(--line)] bg-[var(--bg)] px-2 py-3 min-[1100px]:w-[260px] min-[1100px]:px-3";
+
+export const sidebarShellCompactClass =
+	"sticky top-0 z-30 flex h-screen w-[72px] shrink-0 flex-col justify-between border-r border-[var(--line)] bg-[var(--bg)] px-2 py-3";
 
 export const sidebarBrandClass =
 	"flex items-center gap-2.5 px-2 py-2 text-[var(--ink)] min-[1100px]:px-3";
@@ -19,6 +25,8 @@ export const sidebarBrandMarkClass = "grid size-10 place-items-center";
 
 export const sidebarBrandCopyClass =
 	"hidden flex-col leading-tight min-[1100px]:flex";
+
+export const sidebarBrandCopyCompactClass = "sr-only";
 
 export const sidebarBrandTitleClass = "text-[15px] font-bold tracking-tight";
 
@@ -31,15 +39,23 @@ export const sidebarFooterClass = "flex flex-col gap-2 pb-1";
 export const navLinkClass =
 	"nav-link group flex items-center justify-center gap-4 rounded-full px-3 py-2.5 text-[15px] text-[var(--ink)] transition-colors duration-150 hover:bg-[var(--bg-hover)] min-[1100px]:justify-start";
 
+export const navLinkCompactClass =
+	"nav-link group flex items-center justify-center rounded-full px-3 py-2.5 text-[15px] text-[var(--ink)] transition-colors duration-150 hover:bg-[var(--bg-hover)]";
+
 export const navLinkActiveClass = "nav-link-active font-bold";
 
 export const navLinkIconClass = "shrink-0";
 
 export const navLinkLabelClass = "sr-only min-[1100px]:not-sr-only";
 
+export const navLinkLabelCompactClass = "sr-only";
+
 /* Main column. */
 export const mainColumnClass =
 	"flex w-full min-w-0 max-w-[680px] flex-1 flex-col border-x border-[var(--line)] bg-[var(--bg)]";
+
+export const mainColumnDmClass =
+	"flex w-full min-w-0 flex-1 flex-col border-x border-[var(--line)] bg-[var(--bg)]";
 
 export const pageWrapClass = "flex w-full min-w-0 flex-1 justify-start";
 
@@ -230,7 +246,7 @@ export const linkPreviewHostClass =
 
 /* DM grid. */
 export const dmShellClass =
-	"grid h-[calc(100vh-56px)] min-h-[520px] grid-cols-1 min-[1100px]:grid-cols-[320px_minmax(0,1fr)]";
+	"grid h-[calc(100vh-56px)] min-h-[520px] grid-cols-1 min-[960px]:grid-cols-[360px_minmax(0,1fr)] min-[1360px]:grid-cols-[400px_minmax(0,1fr)]";
 
 export const dmListClass =
 	"flex flex-col overflow-y-auto border-r border-[var(--line)]";

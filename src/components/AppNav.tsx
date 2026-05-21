@@ -14,13 +14,17 @@ import {
 	cx,
 	navLinkActiveClass,
 	navLinkClass,
+	navLinkCompactClass,
 	navLinkIconClass,
 	navLinkLabelClass,
+	navLinkLabelCompactClass,
 	sidebarBrandClass,
 	sidebarBrandCopyClass,
+	sidebarBrandCopyCompactClass,
 	sidebarBrandMarkClass,
 	sidebarBrandTaglineClass,
 	sidebarBrandTitleClass,
+	sidebarShellCompactClass,
 	sidebarFooterClass,
 	sidebarNavClass,
 	sidebarShellClass,
@@ -41,19 +45,23 @@ const links = [
 	{ to: "/blocks", label: "Blocks", icon: ShieldOff },
 ] as const;
 
-export function AppNav() {
+export function AppNav({ compact = false }: { compact?: boolean }) {
 	const pathname = useRouterState({
 		select: (state) => state.location.pathname,
 	});
 
 	return (
-		<aside className={sidebarShellClass}>
+		<aside className={compact ? sidebarShellCompactClass : sidebarShellClass}>
 			<div className="flex flex-col">
 				<Link to="/" className={sidebarBrandClass}>
 					<span className={sidebarBrandMarkClass}>
 						<BirdclawMark className="size-10" />
 					</span>
-					<span className={sidebarBrandCopyClass}>
+					<span
+						className={
+							compact ? sidebarBrandCopyCompactClass : sidebarBrandCopyClass
+						}
+					>
 						<span className={sidebarBrandTitleClass}>birdclaw</span>
 						<span className={sidebarBrandTaglineClass}>
 							Fast search for your archive.
@@ -69,7 +77,10 @@ export function AppNav() {
 								key={link.to}
 								to={link.to}
 								aria-label={link.label}
-								className={cx(navLinkClass, active && navLinkActiveClass)}
+								className={cx(
+									compact ? navLinkCompactClass : navLinkClass,
+									active && navLinkActiveClass,
+								)}
 							>
 								<Icon
 									className={navLinkIconClass}
@@ -77,7 +88,13 @@ export function AppNav() {
 									strokeWidth={active ? 2.4 : 1.8}
 									aria-hidden="true"
 								/>
-								<span className={navLinkLabelClass}>{link.label}</span>
+								<span
+									className={
+										compact ? navLinkLabelCompactClass : navLinkLabelClass
+									}
+								>
+									{link.label}
+								</span>
 							</Link>
 						);
 					})}
