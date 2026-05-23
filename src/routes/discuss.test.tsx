@@ -156,6 +156,10 @@ describe("discuss route", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
 		await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
 		expect(urls[1]?.searchParams.get("refresh")).toBe("true");
+
+		fireEvent.click(screen.getByRole("button", { name: "Discuss" }));
+		await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+		expect(urls[2]?.searchParams.get("refresh")).toBe("true");
 	});
 
 	it("renders request and stream errors", async () => {
