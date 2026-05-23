@@ -234,6 +234,59 @@ describe("mention thread sync", () => {
 		expect(sideReply).toEqual({ kind: "thread", reply_to_id: "root_1" });
 	});
 
+	it("hydrates explicit mention ids instead of the newest mentions", async () => {
+		setupTempHome();
+		insertMention("mention_newer", "newer mention", "2026-05-05T07:00:00.000Z");
+		mocks.listThreadViaBird.mockResolvedValue({
+			data: [
+				{
+					id: "mention_1",
+					author_id: "42",
+					text: "mention text",
+					created_at: "2026-05-04T07:00:00.000Z",
+				},
+			],
+			includes: {
+				users: [{ id: "42", username: "sam", name: "Sam" }],
+			},
+			meta: { result_count: 1 },
+		});
+		const { syncMentionThreads } = await import("./mention-threads-live");
+
+		const result = await syncMentionThreads({
+			tweetIds: ["mention_1"],
+			limit: 5,
+			delayMs: 0,
+			timeoutMs: 5000,
+		});
+
+		expect(result.options.tweetIds).toEqual(["mention_1"]);
+		expect(mocks.listThreadViaBird).toHaveBeenCalledTimes(1);
+		expect(mocks.listThreadViaBird).toHaveBeenCalledWith(
+			expect.objectContaining({ tweetId: "mention_1" }),
+		);
+	});
+
+	it("skips thread reads when explicit mention ids are empty", async () => {
+		setupTempHome();
+		const { syncMentionThreads } = await import("./mention-threads-live");
+
+		const result = await syncMentionThreads({
+			tweetIds: [],
+			limit: 5,
+			delayMs: 0,
+			timeoutMs: 5000,
+		});
+
+		expect(result).toMatchObject({
+			ok: true,
+			mentions: 0,
+			threads: 0,
+			succeeded: 0,
+		});
+		expect(mocks.listThreadViaBird).not.toHaveBeenCalled();
+	});
+
 	it("persists thread video variants in media_json", async () => {
 		setupTempHome();
 		mocks.listThreadViaBird.mockResolvedValue({
