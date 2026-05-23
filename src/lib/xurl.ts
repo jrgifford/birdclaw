@@ -37,6 +37,10 @@ type JsonCommandOptions = {
 	timeoutMs?: number;
 	deadlineMs?: number;
 };
+type OAuth2UsernameCandidate = {
+	app?: string;
+	username: string;
+};
 
 let transportStatusCache:
 	| {
@@ -304,6 +308,51 @@ function execXurlJsonEffect(
 				timeoutMs > 0
 					? new AbortController()
 					: undefined;
+			if (
+				typeof timeoutMs === "number" &&
+				Number.isFinite(timeoutMs) &&
+				timeoutMs <= 0
+			) {
+				throw new Error("xurl command timed out");
+			}
+			const timeout = controller
+				? setTimeout(() => controller.abort(), timeoutMs)
+				: undefined;
+			const result = controller
+				? execFileAsync("xurl", args, { signal: controller.signal })
+				: execFileAsync("xurl", args);
+			return result.finally(() => {
+				if (timeout) {
+					clearTimeout(timeout);
+				}
+			});
+		},
+		catch: normalizeError,
+	});
+}
+
+function getRemainingTimeoutMs(deadlineMs?: number) {
+	if (deadlineMs === undefined) return undefined;
+	const timeoutMs = Math.max(0, deadlineMs - Date.now());
+	if (timeoutMs <= 0) {
+		throw new Error("xurl OAuth2 fallback timed out");
+	}
+	return timeoutMs;
+}
+
+function execXurlTextEffect(
+	args: string[],
+	deadlineMs?: number,
+): Effect.Effect<{ stdout: string; stderr: string }, Error> {
+	return Effect.tryPromise({
+		try: () => {
+			const timeoutMs = getRemainingTimeoutMs(deadlineMs);
+			const controller =
+				typeof timeoutMs === "number" &&
+				Number.isFinite(timeoutMs) &&
+				timeoutMs > 0
+					? new AbortController()
+					: undefined;
 			const timeout = controller
 				? setTimeout(() => controller.abort(), timeoutMs)
 				: undefined;
@@ -364,6 +413,191 @@ function runJsonCommandEffect(
 					Effect.flatMap(() =>
 						runJsonCommandEffect(args, { ...options, deadlineMs }, attempt + 1),
 					),
+				);
+			}),
+		);
+	});
+}
+
+function cleanXurlUsernameLabel(username?: string) {
+	const label = username?.trim().replace(/^@/, "");
+	return label &&
+		label !== "-" &&
+		label !== "–" &&
+		label !== "(none)" &&
+		label.toLowerCase() !== "none" &&
+		label.toLowerCase() !== "unknown" &&
+		/^[^\s]{1,128}$/.test(label)
+		? label
+		: undefined;
+}
+
+function comparableXurlUsername(username?: string) {
+	return cleanXurlUsernameLabel(username)?.toLowerCase();
+}
+
+function cleanXurlAppLabel(app?: string) {
+	const label = app?.trim();
+	return label && /^[^\s]{1,128}$/.test(label) ? label : undefined;
+}
+
+function parseOAuth2UsernamesFromStatus(rawStatus: string) {
+	const seen = new Set<string>();
+	const usernames: OAuth2UsernameCandidate[] = [];
+	let currentApp: string | undefined;
+	for (const line of rawStatus.split(/\r?\n/)) {
+		const appMatch = line.match(/^\s*(?:▸\s*)?([^\s]+)\s+\[client_id:/);
+		if (appMatch) {
+			currentApp = cleanXurlAppLabel(appMatch[1]);
+			continue;
+		}
+		const oauthMatch = line.match(/\boauth2:\s*([^\s]+)/);
+		if (oauthMatch) {
+			const username = cleanXurlUsernameLabel(oauthMatch[1]);
+			const key = username
+				? `${currentApp ?? "default"}:${username}`
+				: undefined;
+			if (username && key && !seen.has(key)) {
+				seen.add(key);
+				usernames.push({ app: currentApp, username });
+			}
+		}
+	}
+	return usernames;
+}
+
+function readOAuth2UsernameCandidatesEffect(
+	deadlineMs?: number,
+): Effect.Effect<OAuth2UsernameCandidate[], never> {
+	return execXurlTextEffect(["auth", "status"], deadlineMs).pipe(
+		Effect.map(({ stdout }) => parseOAuth2UsernamesFromStatus(stdout)),
+		Effect.catchAll(() => Effect.succeed([])),
+	);
+}
+
+function lookupOAuth2UsernameForAccountEffect(
+	expectedUsername: string,
+	attemptedUsernames: Set<string>,
+	deadlineMs?: number,
+	knownCandidates?: OAuth2UsernameCandidate[],
+) {
+	return Effect.gen(function* () {
+		const expected = comparableXurlUsername(expectedUsername);
+		if (!expected) return undefined;
+
+		const candidates =
+			knownCandidates ??
+			(yield* readOAuth2UsernameCandidatesEffect(deadlineMs));
+		for (const candidate of candidates) {
+			const candidateKey = `${candidate.app ?? "default"}:${candidate.username}`;
+			if (attemptedUsernames.has(candidateKey)) continue;
+			const payload = yield* runJsonCommandEffect(
+				oauth2ArgsForCandidate(candidate, ["/2/users/me"]),
+				{ deadlineMs },
+			).pipe(Effect.catchAll(() => Effect.succeed(null)));
+			const user = payload ? authenticatedUserFromPayload(payload) : null;
+			const actual = comparableXurlUsername(String(user?.username ?? ""));
+			if (actual === expected) {
+				return candidate;
+			}
+		}
+
+		return undefined;
+	});
+}
+
+function oauth2ArgsForCandidate(
+	candidate: OAuth2UsernameCandidate | undefined,
+	args: string[],
+) {
+	return [
+		...(candidate?.app ? ["--app", candidate.app] : []),
+		"--auth",
+		"oauth2",
+		...(candidate?.username ? ["--username", candidate.username] : []),
+		...args,
+	];
+}
+
+function runOAuth2JsonCommandEffect({
+	args,
+	username,
+	options,
+}: {
+	args: string[];
+	username?: string;
+	options?: JsonCommandOptions;
+}) {
+	const primaryUsername = cleanXurlUsernameLabel(username);
+	return Effect.gen(function* () {
+		const deadlineMs =
+			options?.deadlineMs ??
+			(typeof options?.timeoutMs === "number" &&
+			Number.isFinite(options.timeoutMs) &&
+			options.timeoutMs > 0
+				? Date.now() + options.timeoutMs
+				: undefined);
+		const scopedOptions = { ...options, deadlineMs };
+		let authCandidate: OAuth2UsernameCandidate | undefined = primaryUsername
+			? { username: primaryUsername }
+			: undefined;
+		if (primaryUsername) {
+			const candidates = yield* readOAuth2UsernameCandidatesEffect(deadlineMs);
+			const primaryCandidates = candidates.filter(
+				(candidate) => candidate.username === primaryUsername,
+			);
+			if (primaryCandidates.length === 1) {
+				authCandidate = primaryCandidates[0];
+			} else if (primaryCandidates.length > 1) {
+				authCandidate = { username: primaryUsername };
+			} else {
+				const fallbackUsername = yield* lookupOAuth2UsernameForAccountEffect(
+					primaryUsername,
+					new Set(),
+					deadlineMs,
+					candidates,
+				);
+				if (fallbackUsername) {
+					authCandidate = fallbackUsername;
+				}
+			}
+		}
+
+		if (deadlineMs !== undefined && Date.now() >= deadlineMs) {
+			return yield* Effect.fail(new Error("xurl OAuth2 fallback timed out"));
+		}
+
+		return yield* runJsonCommandEffect(
+			oauth2ArgsForCandidate(authCandidate, args),
+			scopedOptions,
+		).pipe(
+			Effect.catchAll((error) => {
+				if (!primaryUsername) {
+					return Effect.fail(error);
+				}
+				const attempted = new Set([
+					authCandidate
+						? `${authCandidate.app ?? "default"}:${authCandidate.username}`
+						: `default:${primaryUsername}`,
+				]);
+				if (authCandidate?.username !== primaryUsername) {
+					attempted.add(`default:${primaryUsername}`);
+				}
+				return lookupOAuth2UsernameForAccountEffect(
+					primaryUsername,
+					attempted,
+					deadlineMs,
+				).pipe(
+					Effect.flatMap((fallbackUsername) => {
+						if (!fallbackUsername) {
+							return Effect.fail(error);
+						}
+						return runJsonCommandEffect(
+							oauth2ArgsForCandidate(fallbackUsername, args),
+							scopedOptions,
+						);
+					}),
+					Effect.catchAll(() => Effect.fail(error)),
 				);
 			}),
 		);
@@ -452,18 +686,11 @@ export function lookupAuthenticatedUserFreshEffect() {
 	);
 }
 
-function oauth2UsernameArgs(username?: string) {
-	const normalized = username?.trim().replace(/^@/, "");
-	return normalized ? ["--username", normalized] : [];
-}
-
 export function lookupAuthenticatedOAuth2UserEffect(username?: string) {
-	return runJsonCommandEffect([
-		"--auth",
-		"oauth2",
-		...oauth2UsernameArgs(username),
-		"whoami",
-	]).pipe(Effect.map(authenticatedUserFromPayload));
+	return runOAuth2JsonCommandEffect({
+		args: ["whoami"],
+		username,
+	}).pipe(Effect.map(authenticatedUserFromPayload));
 }
 
 export function lookupAuthenticatedUserEffect() {
@@ -580,9 +807,10 @@ export function listMentionsViaXurlEffect({
 			query.set("start_time", startTime);
 		}
 
-		const payload = yield* runJsonCommandEffect([
-			`/2/users/${resolvedUserId}/mentions?${query.toString()}`,
-		]);
+		const payload = yield* runOAuth2JsonCommandEffect({
+			args: [`/2/users/${resolvedUserId}/mentions?${query.toString()}`],
+			username,
+		});
 		return toXurlMentionsResponse(payload);
 	});
 }
@@ -625,15 +853,13 @@ export function listHomeTimelineViaXurlEffect({
 			query.set("pagination_token", paginationToken);
 		}
 
-		const payload = yield* runJsonCommandEffect(
-			[
-				"--auth",
-				"oauth2",
-				...(username ? ["--username", username] : []),
+		const payload = yield* runOAuth2JsonCommandEffect({
+			args: [
 				`/2/users/${resolvedUserId}/timelines/reverse_chronological?${query.toString()}`,
 			],
-			{ timeoutMs },
-		);
+			username,
+			options: { timeoutMs },
+		});
 		return toXurlMentionsResponse(payload);
 	});
 }
@@ -701,11 +927,10 @@ function listTimelineCollectionViaXurlEffect({
 			query.set("pagination_token", paginationToken);
 		}
 
-		const payload = yield* runJsonCommandEffect([
-			"--auth",
-			"oauth2",
-			`/2/users/${resolvedUserId}/${collection}?${query.toString()}`,
-		]);
+		const payload = yield* runOAuth2JsonCommandEffect({
+			args: [`/2/users/${resolvedUserId}/${collection}?${query.toString()}`],
+			username,
+		});
 		return toXurlMentionsResponse(payload);
 	});
 }
@@ -774,12 +999,10 @@ export function listDirectMessageEventsViaXurlEffect({
 		query.set("pagination_token", paginationToken);
 	}
 
-	return runJsonCommandEffect([
-		"--auth",
-		"oauth2",
-		...oauth2UsernameArgs(username),
-		`/2/dm_events?${query.toString()}`,
-	]).pipe(
+	return runOAuth2JsonCommandEffect({
+		args: [`/2/dm_events?${query.toString()}`],
+		username,
+	}).pipe(
 		Effect.map((payload) => ({
 			data: Array.isArray(payload.data)
 				? (payload.data as XurlDmEventsResponse["data"])
@@ -828,11 +1051,10 @@ export function listFollowUsersViaXurlEffect({
 			query.set("pagination_token", paginationToken);
 		}
 
-		const payload = yield* runJsonCommandEffect([
-			"--auth",
-			"oauth2",
-			`/2/users/${resolvedUserId}/${direction}?${query.toString()}`,
-		]);
+		const payload = yield* runOAuth2JsonCommandEffect({
+			args: [`/2/users/${resolvedUserId}/${direction}?${query.toString()}`],
+			username,
+		});
 		return {
 			data: Array.isArray(payload.data)
 				? (payload.data as XurlMentionUser[])

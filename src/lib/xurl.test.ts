@@ -39,6 +39,7 @@ const VIDEO_MEDIA = {
 		},
 	],
 } as const;
+const AUTH_STATUS_STEIPETE = "default\n  oauth2: steipete\n";
 
 describe("xurl transport wrapper", () => {
 	beforeEach(() => {
@@ -234,28 +235,33 @@ describe("xurl transport wrapper", () => {
 	});
 
 	it("lists mentions via the xurl users mentions endpoint", async () => {
-		execFileAsyncMock.mockResolvedValueOnce({
-			stdout: JSON.stringify({ data: [{ id: "25401953" }] }),
-			stderr: "",
-		});
-		execFileAsyncMock.mockResolvedValueOnce({
-			stdout: JSON.stringify({
-				data: [
-					{
-						id: "tweet_1",
-						author_id: "42",
-						text: "hello",
-						attachments: { media_keys: ["photo_1", "video_1"] },
+		execFileAsyncMock
+			.mockResolvedValueOnce({
+				stdout: JSON.stringify({ data: [{ id: "25401953" }] }),
+				stderr: "",
+			})
+			.mockResolvedValueOnce({
+				stdout: AUTH_STATUS_STEIPETE,
+				stderr: "",
+			})
+			.mockResolvedValueOnce({
+				stdout: JSON.stringify({
+					data: [
+						{
+							id: "tweet_1",
+							author_id: "42",
+							text: "hello",
+							attachments: { media_keys: ["photo_1", "video_1"] },
+						},
+					],
+					includes: {
+						users: [{ id: "42", username: "sam", name: "Sam" }],
+						media: [PHOTO_MEDIA, VIDEO_MEDIA],
 					},
-				],
-				includes: {
-					users: [{ id: "42", username: "sam", name: "Sam" }],
-					media: [PHOTO_MEDIA, VIDEO_MEDIA],
-				},
-				meta: { result_count: 1 },
-			}),
-			stderr: "",
-		});
+					meta: { result_count: 1 },
+				}),
+				stderr: "",
+			});
 		const { listMentionsViaXurl } = await import("./xurl");
 
 		await expect(
@@ -278,7 +284,11 @@ describe("xurl transport wrapper", () => {
 			},
 			meta: { result_count: 1 },
 		});
-		expect(execFileAsyncMock).toHaveBeenCalledWith("xurl", [
+		expect(execFileAsyncMock).toHaveBeenNthCalledWith(3, "xurl", [
+			"--auth",
+			"oauth2",
+			"--username",
+			"steipete",
 			`/2/users/25401953/mentions?max_results=5&expansions=${AUTHOR_MEDIA_EXPANSIONS}&tweet.fields=created_at%2Cconversation_id%2Centities%2Cpublic_metrics&media.fields=${MEDIA_FIELDS}&user.fields=${RICH_USER_FIELDS}`,
 		]);
 	});
@@ -304,6 +314,8 @@ describe("xurl transport wrapper", () => {
 			meta: { next_token: "next-page" },
 		});
 		expect(execFileAsyncMock).toHaveBeenCalledWith("xurl", [
+			"--auth",
+			"oauth2",
 			`/2/users/25401953/mentions?max_results=100&expansions=${AUTHOR_MEDIA_EXPANSIONS}&tweet.fields=created_at%2Cconversation_id%2Centities%2Cpublic_metrics&media.fields=${MEDIA_FIELDS}&user.fields=${RICH_USER_FIELDS}&pagination_token=next-page`,
 		]);
 	});
@@ -336,10 +348,15 @@ describe("xurl transport wrapper", () => {
 	});
 
 	it("selects the requested OAuth2 username for home timeline reads", async () => {
-		execFileAsyncMock.mockResolvedValueOnce({
-			stdout: JSON.stringify({ data: [] }),
-			stderr: "",
-		});
+		execFileAsyncMock
+			.mockResolvedValueOnce({
+				stdout: AUTH_STATUS_STEIPETE,
+				stderr: "",
+			})
+			.mockResolvedValueOnce({
+				stdout: JSON.stringify({ data: [] }),
+				stderr: "",
+			});
 		const { listHomeTimelineViaXurl } = await import("./xurl");
 
 		await listHomeTimelineViaXurl({
@@ -348,11 +365,55 @@ describe("xurl transport wrapper", () => {
 			username: "steipete",
 		});
 
-		expect(execFileAsyncMock).toHaveBeenCalledWith("xurl", [
+		expect(execFileAsyncMock).toHaveBeenNthCalledWith(2, "xurl", [
 			"--auth",
 			"oauth2",
 			"--username",
 			"steipete",
+			`/2/users/25401953/timelines/reverse_chronological?max_results=100&expansions=${AUTHOR_MEDIA_EXPANSIONS}&tweet.fields=created_at%2Cconversation_id%2Centities%2Cpublic_metrics%2Creferenced_tweets&media.fields=${MEDIA_FIELDS}&user.fields=${RICH_USER_FIELDS}`,
+		]);
+	});
+
+	it("falls back to another OAuth2 label when it authenticates as the requested account", async () => {
+		execFileAsyncMock
+			.mockResolvedValueOnce({
+				stdout: "default\nxurl-steipete\n  oauth2: openclaw-steipete\n",
+				stderr: "",
+			})
+			.mockResolvedValueOnce({
+				stdout: JSON.stringify({
+					data: { id: "25401953", username: "steipete" },
+				}),
+				stderr: "",
+			})
+			.mockResolvedValueOnce({
+				stdout: JSON.stringify({ data: [] }),
+				stderr: "",
+			});
+		const { listHomeTimelineViaXurl } = await import("./xurl");
+
+		await listHomeTimelineViaXurl({
+			maxResults: 100,
+			userId: "25401953",
+			username: "steipete",
+		});
+
+		expect(execFileAsyncMock).toHaveBeenNthCalledWith(1, "xurl", [
+			"auth",
+			"status",
+		]);
+		expect(execFileAsyncMock).toHaveBeenNthCalledWith(2, "xurl", [
+			"--auth",
+			"oauth2",
+			"--username",
+			"openclaw-steipete",
+			"/2/users/me",
+		]);
+		expect(execFileAsyncMock).toHaveBeenNthCalledWith(3, "xurl", [
+			"--auth",
+			"oauth2",
+			"--username",
+			"openclaw-steipete",
 			`/2/users/25401953/timelines/reverse_chronological?max_results=100&expansions=${AUTHOR_MEDIA_EXPANSIONS}&tweet.fields=created_at%2Cconversation_id%2Centities%2Cpublic_metrics%2Creferenced_tweets&media.fields=${MEDIA_FIELDS}&user.fields=${RICH_USER_FIELDS}`,
 		]);
 	});
@@ -374,6 +435,8 @@ describe("xurl transport wrapper", () => {
 		});
 
 		expect(execFileAsyncMock).toHaveBeenCalledWith("xurl", [
+			"--auth",
+			"oauth2",
 			`/2/users/25401953/mentions?max_results=100&expansions=${AUTHOR_MEDIA_EXPANSIONS}&tweet.fields=created_at%2Cconversation_id%2Centities%2Cpublic_metrics&media.fields=${MEDIA_FIELDS}&user.fields=${RICH_USER_FIELDS}&start_time=2026-03-01T00%3A00%3A00Z`,
 		]);
 	});
@@ -443,10 +506,15 @@ describe("xurl transport wrapper", () => {
 	});
 
 	it("passes the selected OAuth2 username for direct message event scans", async () => {
-		execFileAsyncMock.mockResolvedValueOnce({
-			stdout: JSON.stringify({ data: [], meta: { result_count: 0 } }),
-			stderr: "",
-		});
+		execFileAsyncMock
+			.mockResolvedValueOnce({
+				stdout: AUTH_STATUS_STEIPETE,
+				stderr: "",
+			})
+			.mockResolvedValueOnce({
+				stdout: JSON.stringify({ data: [], meta: { result_count: 0 } }),
+				stderr: "",
+			});
 		const { listDirectMessageEventsViaXurl } = await import("./xurl");
 
 		await listDirectMessageEventsViaXurl({
@@ -454,7 +522,7 @@ describe("xurl transport wrapper", () => {
 			username: "@steipete",
 		});
 
-		expect(execFileAsyncMock).toHaveBeenCalledWith("xurl", [
+		expect(execFileAsyncMock).toHaveBeenNthCalledWith(2, "xurl", [
 			"--auth",
 			"oauth2",
 			"--username",
@@ -494,10 +562,15 @@ describe("xurl transport wrapper", () => {
 	});
 
 	it("passes the selected OAuth2 username for authenticated lookups", async () => {
-		execFileAsyncMock.mockResolvedValueOnce({
-			stdout: JSON.stringify({ data: { id: "1", username: "steipete" } }),
-			stderr: "",
-		});
+		execFileAsyncMock
+			.mockResolvedValueOnce({
+				stdout: AUTH_STATUS_STEIPETE,
+				stderr: "",
+			})
+			.mockResolvedValueOnce({
+				stdout: JSON.stringify({ data: { id: "1", username: "steipete" } }),
+				stderr: "",
+			});
 		const { lookupAuthenticatedOAuth2UserEffect } = await import("./xurl");
 
 		await expect(
@@ -506,7 +579,7 @@ describe("xurl transport wrapper", () => {
 			id: "1",
 			username: "steipete",
 		});
-		expect(execFileAsyncMock).toHaveBeenCalledWith("xurl", [
+		expect(execFileAsyncMock).toHaveBeenNthCalledWith(2, "xurl", [
 			"--auth",
 			"oauth2",
 			"--username",
@@ -786,6 +859,10 @@ describe("xurl transport wrapper", () => {
 				stderr: "",
 			})
 			.mockResolvedValueOnce({
+				stdout: AUTH_STATUS_STEIPETE,
+				stderr: "",
+			})
+			.mockResolvedValueOnce({
 				stdout: JSON.stringify({
 					data: [
 						{
@@ -843,9 +920,11 @@ describe("xurl transport wrapper", () => {
 			data: [{ id: "bookmark_1", author_id: "43", text: "saved" }],
 			meta: { next_token: "next" },
 		});
-		expect(execFileAsyncMock).toHaveBeenCalledWith("xurl", [
+		expect(execFileAsyncMock).toHaveBeenNthCalledWith(3, "xurl", [
 			"--auth",
 			"oauth2",
+			"--username",
+			"steipete",
 			`/2/users/25401953/liked_tweets?max_results=5&expansions=${AUTHOR_MEDIA_EXPANSIONS}&tweet.fields=created_at%2Cconversation_id%2Centities%2Cpublic_metrics%2Creferenced_tweets&media.fields=${MEDIA_FIELDS}&user.fields=${RICH_USER_FIELDS}`,
 		]);
 		expect(execFileAsyncMock).toHaveBeenCalledWith("xurl", [
@@ -938,6 +1017,10 @@ describe("xurl transport wrapper", () => {
 				stderr: "",
 			})
 			.mockResolvedValueOnce({
+				stdout: "default\n  oauth2: amelia\n",
+				stderr: "",
+			})
+			.mockResolvedValueOnce({
 				stdout: JSON.stringify({ data: null, meta: null }),
 				stderr: "",
 			});
@@ -953,9 +1036,11 @@ describe("xurl transport wrapper", () => {
 			data: [],
 			meta: undefined,
 		});
-		expect(execFileAsyncMock).toHaveBeenNthCalledWith(2, "xurl", [
+		expect(execFileAsyncMock).toHaveBeenNthCalledWith(3, "xurl", [
 			"--auth",
 			"oauth2",
+			"--username",
+			"amelia",
 			`/2/users/7/following?max_results=50&user.fields=${FOLLOW_USER_FIELDS}`,
 		]);
 	});

@@ -10,6 +10,7 @@
 
 ### Fixed
 
+- Recover live `xurl` sync when the valid OAuth token is stored under a different local xurl username label than the Birdclaw account handle.
 - Let normal Discuss web searches reuse cached AI discussions while keeping the Refresh button as the explicit forced-refresh path.
 - Tighten AI report line height and first-block spacing in Today and Discuss.
 
