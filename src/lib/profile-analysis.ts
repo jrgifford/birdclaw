@@ -20,6 +20,8 @@ import {
 	upsertTweetAccountEdge,
 } from "./tweet-account-edges";
 import { buildExternalProfileId, upsertProfileFromXUser } from "./x-profile";
+import { recordXurlRateLimitEventSafe } from "./xurl-rate-limits";
+import type { XurlJsonCommandAttempt } from "./xurl";
 import {
 	listUserTweetsEffect,
 	lookupUsersByHandlesEffect,
@@ -238,9 +240,7 @@ function rateLimitRetryMsFromOptions(options: ProfileAnalysisOptions) {
 function rateLimitMaxRetriesFromOptions(options: ProfileAnalysisOptions) {
 	return normalizeNonNegativeInteger(
 		options.rateLimitMaxRetries ??
-			envNonNegativeInteger(
-				"BIRDCLAW_PROFILE_ANALYSIS_RATE_LIMIT_MAX_RETRIES",
-			),
+			envNonNegativeInteger("BIRDCLAW_PROFILE_ANALYSIS_RATE_LIMIT_MAX_RETRIES"),
 		DEFAULT_RATE_LIMIT_MAX_RETRIES,
 	);
 }
@@ -744,6 +744,23 @@ export function collectProfileAnalysisContextEffect(
 			return { ...cached.value, fetchCached: true };
 		}
 
+		const recordTimelineAttempt = (attempt: XurlJsonCommandAttempt) =>
+			recordXurlRateLimitEventSafe({
+				endpoint: "users_id_tweets",
+				status: attempt.status,
+				source: "profile-analysis:timeline",
+				handle,
+				...(attempt.error ? { detail: attempt.error.message } : {}),
+			});
+		const recordConversationAttempt = (attempt: XurlJsonCommandAttempt) =>
+			recordXurlRateLimitEventSafe({
+				endpoint: "tweets_search_recent",
+				status: attempt.status,
+				source: "profile-analysis:conversation",
+				handle,
+				...(attempt.error ? { detail: attempt.error.message } : {}),
+			});
+
 		emitStatus(handlers, "Resolving profile", `@${handle}`);
 		yield* abortIfRequestedEffect(options.signal);
 		const [user] = yield* lookupUsersByHandlesEffect([handle], {
@@ -803,6 +820,7 @@ export function collectProfileAnalysisContextEffect(
 				],
 				username: account.handle,
 				signal: options.signal,
+				onAttempt: recordTimelineAttempt,
 			});
 			yield* abortIfRequestedEffect(options.signal);
 			const limitedResponse =
@@ -861,17 +879,15 @@ export function collectProfileAnalysisContextEffect(
 				let response: XurlTweetsResponse | null = null;
 				for (let attempt = 0; attempt <= rateLimitMaxRetries; attempt += 1) {
 					conversationRequestCount += 1;
-					response = yield* searchRecentByConversationIdEffect(
-						conversationId,
-						{
-							maxResults: XURL_PAGE_SIZE,
-							paginationToken: conversationNextToken,
-							timeoutMs: 30_000,
-							auth: "oauth2",
-							username: account.handle,
-							signal: options.signal,
-						},
-					).pipe(
+					response = yield* searchRecentByConversationIdEffect(conversationId, {
+						maxResults: XURL_PAGE_SIZE,
+						paginationToken: conversationNextToken,
+						timeoutMs: 30_000,
+						auth: "oauth2",
+						username: account.handle,
+						signal: options.signal,
+						onAttempt: recordConversationAttempt,
+					}).pipe(
 						Effect.catchAll((error) => {
 							if (!isXurlRateLimitError(error)) {
 								return Effect.fail(error);

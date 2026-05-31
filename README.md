@@ -405,6 +405,8 @@ Conversation backfill uses X recent search, so Birdclaw paces those calls by def
 
 When `xurl` has multiple OAuth2 labels, set `BIRDCLAW_XURL_OAUTH2_APP` and `BIRDCLAW_XURL_OAUTH2_USERNAME` to force the known-good token.
 
+The web UI uses `/profile-analyze` for the analysis page and `/rate-limits` for observed `xurl` pressure, recent 429s, and the active Profile Analyse throttle settings.
+
 ```bash
 birdclaw profile-analyze steipete
 birdclaw profile-analyse openai --max-pages 20 --max-conversations 40 --conversation-delay-ms 3100 --rate-limit-retries 2 --json

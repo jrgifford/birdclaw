@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TodayRouteImport } from './routes/today'
+import { Route as RateLimitsRouteImport } from './routes/rate-limits'
 import { Route as ProfileAnalyzeRouteImport } from './routes/profile-analyze'
 import { Route as MentionsRouteImport } from './routes/mentions'
 import { Route as LinksRouteImport } from './routes/links'
@@ -20,6 +21,7 @@ import { Route as DiscussRouteImport } from './routes/discuss'
 import { Route as BookmarksRouteImport } from './routes/bookmarks'
 import { Route as BlocksRouteImport } from './routes/blocks'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiXurlRateLimitsRouteImport } from './routes/api/xurl-rate-limits'
 import { Route as ApiSyncRouteImport } from './routes/api/sync'
 import { Route as ApiStatusRouteImport } from './routes/api/status'
 import { Route as ApiSearchDiscussionRouteImport } from './routes/api/search-discussion'
@@ -38,6 +40,11 @@ import { Route as ApiActionRouteImport } from './routes/api/action'
 const TodayRoute = TodayRouteImport.update({
   id: '/today',
   path: '/today',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RateLimitsRoute = RateLimitsRouteImport.update({
+  id: '/rate-limits',
+  path: '/rate-limits',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProfileAnalyzeRoute = ProfileAnalyzeRouteImport.update({
@@ -88,6 +95,11 @@ const BlocksRoute = BlocksRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiXurlRateLimitsRoute = ApiXurlRateLimitsRouteImport.update({
+  id: '/api/xurl-rate-limits',
+  path: '/api/xurl-rate-limits',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiSyncRoute = ApiSyncRouteImport.update({
@@ -172,6 +184,7 @@ export interface FileRoutesByFullPath {
   '/links': typeof LinksRoute
   '/mentions': typeof MentionsRoute
   '/profile-analyze': typeof ProfileAnalyzeRoute
+  '/rate-limits': typeof RateLimitsRoute
   '/today': typeof TodayRoute
   '/api/action': typeof ApiActionRoute
   '/api/avatar': typeof ApiAvatarRoute
@@ -187,6 +200,7 @@ export interface FileRoutesByFullPath {
   '/api/search-discussion': typeof ApiSearchDiscussionRoute
   '/api/status': typeof ApiStatusRoute
   '/api/sync': typeof ApiSyncRoute
+  '/api/xurl-rate-limits': typeof ApiXurlRateLimitsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -199,6 +213,7 @@ export interface FileRoutesByTo {
   '/links': typeof LinksRoute
   '/mentions': typeof MentionsRoute
   '/profile-analyze': typeof ProfileAnalyzeRoute
+  '/rate-limits': typeof RateLimitsRoute
   '/today': typeof TodayRoute
   '/api/action': typeof ApiActionRoute
   '/api/avatar': typeof ApiAvatarRoute
@@ -214,6 +229,7 @@ export interface FileRoutesByTo {
   '/api/search-discussion': typeof ApiSearchDiscussionRoute
   '/api/status': typeof ApiStatusRoute
   '/api/sync': typeof ApiSyncRoute
+  '/api/xurl-rate-limits': typeof ApiXurlRateLimitsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -227,6 +243,7 @@ export interface FileRoutesById {
   '/links': typeof LinksRoute
   '/mentions': typeof MentionsRoute
   '/profile-analyze': typeof ProfileAnalyzeRoute
+  '/rate-limits': typeof RateLimitsRoute
   '/today': typeof TodayRoute
   '/api/action': typeof ApiActionRoute
   '/api/avatar': typeof ApiAvatarRoute
@@ -242,6 +259,7 @@ export interface FileRoutesById {
   '/api/search-discussion': typeof ApiSearchDiscussionRoute
   '/api/status': typeof ApiStatusRoute
   '/api/sync': typeof ApiSyncRoute
+  '/api/xurl-rate-limits': typeof ApiXurlRateLimitsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -256,6 +274,7 @@ export interface FileRouteTypes {
     | '/links'
     | '/mentions'
     | '/profile-analyze'
+    | '/rate-limits'
     | '/today'
     | '/api/action'
     | '/api/avatar'
@@ -271,6 +290,7 @@ export interface FileRouteTypes {
     | '/api/search-discussion'
     | '/api/status'
     | '/api/sync'
+    | '/api/xurl-rate-limits'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -283,6 +303,7 @@ export interface FileRouteTypes {
     | '/links'
     | '/mentions'
     | '/profile-analyze'
+    | '/rate-limits'
     | '/today'
     | '/api/action'
     | '/api/avatar'
@@ -298,6 +319,7 @@ export interface FileRouteTypes {
     | '/api/search-discussion'
     | '/api/status'
     | '/api/sync'
+    | '/api/xurl-rate-limits'
   id:
     | '__root__'
     | '/'
@@ -310,6 +332,7 @@ export interface FileRouteTypes {
     | '/links'
     | '/mentions'
     | '/profile-analyze'
+    | '/rate-limits'
     | '/today'
     | '/api/action'
     | '/api/avatar'
@@ -325,6 +348,7 @@ export interface FileRouteTypes {
     | '/api/search-discussion'
     | '/api/status'
     | '/api/sync'
+    | '/api/xurl-rate-limits'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -338,6 +362,7 @@ export interface RootRouteChildren {
   LinksRoute: typeof LinksRoute
   MentionsRoute: typeof MentionsRoute
   ProfileAnalyzeRoute: typeof ProfileAnalyzeRoute
+  RateLimitsRoute: typeof RateLimitsRoute
   TodayRoute: typeof TodayRoute
   ApiActionRoute: typeof ApiActionRoute
   ApiAvatarRoute: typeof ApiAvatarRoute
@@ -353,6 +378,7 @@ export interface RootRouteChildren {
   ApiSearchDiscussionRoute: typeof ApiSearchDiscussionRoute
   ApiStatusRoute: typeof ApiStatusRoute
   ApiSyncRoute: typeof ApiSyncRoute
+  ApiXurlRateLimitsRoute: typeof ApiXurlRateLimitsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -362,6 +388,13 @@ declare module '@tanstack/react-router' {
       path: '/today'
       fullPath: '/today'
       preLoaderRoute: typeof TodayRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/rate-limits': {
+      id: '/rate-limits'
+      path: '/rate-limits'
+      fullPath: '/rate-limits'
+      preLoaderRoute: typeof RateLimitsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/profile-analyze': {
@@ -432,6 +465,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/xurl-rate-limits': {
+      id: '/api/xurl-rate-limits'
+      path: '/api/xurl-rate-limits'
+      fullPath: '/api/xurl-rate-limits'
+      preLoaderRoute: typeof ApiXurlRateLimitsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/sync': {
@@ -546,6 +586,7 @@ const rootRouteChildren: RootRouteChildren = {
   LinksRoute: LinksRoute,
   MentionsRoute: MentionsRoute,
   ProfileAnalyzeRoute: ProfileAnalyzeRoute,
+  RateLimitsRoute: RateLimitsRoute,
   TodayRoute: TodayRoute,
   ApiActionRoute: ApiActionRoute,
   ApiAvatarRoute: ApiAvatarRoute,
@@ -561,6 +602,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSearchDiscussionRoute: ApiSearchDiscussionRoute,
   ApiStatusRoute: ApiStatusRoute,
   ApiSyncRoute: ApiSyncRoute,
+  ApiXurlRateLimitsRoute: ApiXurlRateLimitsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

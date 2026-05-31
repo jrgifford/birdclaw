@@ -3,6 +3,7 @@ import {
 	Bell,
 	Bookmark,
 	CalendarDays,
+	Gauge,
 	Heart,
 	Home,
 	Inbox,
@@ -45,6 +46,7 @@ const links = [
 	{ to: "/likes", label: "Likes", icon: Heart },
 	{ to: "/bookmarks", label: "Bookmarks", icon: Bookmark },
 	{ to: "/links", label: "Links", icon: LinkIcon },
+	{ to: "/rate-limits", label: "Rate Limits", icon: Gauge },
 	{ to: "/dms", label: "DMs", icon: Mail },
 	{ to: "/blocks", label: "Blocks", icon: ShieldOff },
 ] as const;

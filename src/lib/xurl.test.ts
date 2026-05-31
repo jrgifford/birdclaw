@@ -1018,6 +1018,50 @@ describe("xurl transport wrapper", () => {
 		}
 	});
 
+	it("emits per-attempt telemetry for hidden JSON retries", async () => {
+		vi.useFakeTimers();
+		try {
+			process.env.BIRDCLAW_XURL_RETRY_BASE_MS = "500";
+			execFileAsyncMock
+				.mockRejectedValueOnce(
+					Object.assign(new Error("rate limited"), {
+						stdout: JSON.stringify({ status: 429 }),
+					}),
+				)
+				.mockResolvedValueOnce({
+					stdout: JSON.stringify({
+						data: [{ id: "tweet_1", text: "hello" }],
+					}),
+					stderr: "",
+				});
+			const { searchRecentByConversationIdEffect } = await import("./xurl");
+			const attempts: Array<{ attempt: number; status: string }> = [];
+
+			const result = Effect.runPromise(
+				searchRecentByConversationIdEffect("conversation_1", {
+					maxResults: 10,
+					timeoutMs: 2000,
+					onAttempt: (attempt) =>
+						attempts.push({
+							attempt: attempt.attempt,
+							status: attempt.status,
+						}),
+				}),
+			);
+			await vi.advanceTimersByTimeAsync(500);
+
+			await expect(result).resolves.toEqual({
+				data: [{ id: "tweet_1", text: "hello" }],
+			});
+			expect(attempts).toEqual([
+				{ attempt: 0, status: "rate_limited" },
+				{ attempt: 1, status: "ok" },
+			]);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
 	it("checks live-write disable when xurl effects run", async () => {
 		const { dmViaXurlEffect, muteUserViaXurlEffect } = await import("./xurl");
 

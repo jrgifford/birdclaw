@@ -37,7 +37,14 @@ type JsonCommandOptions = {
 	timeoutMs?: number;
 	deadlineMs?: number;
 	signal?: AbortSignal;
+	onAttempt?: (attempt: XurlJsonCommandAttempt) => void;
 };
+export interface XurlJsonCommandAttempt {
+	args: readonly string[];
+	attempt: number;
+	status: "ok" | "rate_limited" | "error";
+	error?: Error;
+}
 type OAuth2UsernameCandidate = {
 	app?: string;
 	username: string;
@@ -146,6 +153,17 @@ function getRetryDelayMs(error: unknown, attempt: number) {
 
 	const baseDelay = getJsonRetryBaseDelayMs();
 	return Math.min(baseDelay * 2 ** attempt, 30_000);
+}
+
+function emitJsonCommandAttempt(
+	options: JsonCommandOptions,
+	attempt: XurlJsonCommandAttempt,
+) {
+	try {
+		options.onAttempt?.(attempt);
+	} catch {
+		// Telemetry observers must not affect xurl command behavior.
+	}
 }
 
 function capTimelineCollectionMaxResults(
@@ -415,8 +433,19 @@ function runJsonCommandEffect(
 			: undefined;
 		return yield* execXurlJsonEffect(args, timeoutMs, options.signal).pipe(
 			Effect.flatMap(({ stdout }) => parseJsonPayloadEffect(stdout, args)),
+			Effect.tap(() =>
+				Effect.sync(() =>
+					emitJsonCommandAttempt(options, { args, attempt, status: "ok" }),
+				),
+			),
 			Effect.catchAll((error) => {
 				const retryDelayMs = getRetryDelayMs(error, attempt);
+				emitJsonCommandAttempt(options, {
+					args,
+					attempt,
+					status: retryDelayMs === null ? "error" : "rate_limited",
+					error,
+				});
 				if (retryDelayMs === null || attempt >= JSON_RETRY_LIMIT - 1) {
 					return Effect.fail(formatXurlCommandError(error, args));
 				}
@@ -1203,6 +1232,7 @@ export function listUserTweetsEffect(
 		auth,
 		username,
 		signal,
+		onAttempt,
 	}: {
 		maxResults: number;
 		paginationToken?: string;
@@ -1216,6 +1246,7 @@ export function listUserTweetsEffect(
 		auth?: "oauth2";
 		username?: string;
 		signal?: AbortSignal;
+		onAttempt?: JsonCommandOptions["onAttempt"];
 	},
 ): Effect.Effect<XurlUserTweetsResponse, Error> {
 	const query = new URLSearchParams({
@@ -1254,9 +1285,9 @@ export function listUserTweetsEffect(
 			? runOAuth2JsonCommandEffect({
 					args: [endpoint],
 					username,
-					options: { signal },
+					options: { signal, onAttempt },
 				})
-			: runJsonCommandEffect([endpoint], { signal });
+			: runJsonCommandEffect([endpoint], { signal, onAttempt });
 	return command.pipe(
 		Effect.map((payload) => {
 			const data = Array.isArray(payload.data)
@@ -1296,6 +1327,7 @@ export function listUserTweets(
 		auth?: "oauth2";
 		username?: string;
 		signal?: AbortSignal;
+		onAttempt?: JsonCommandOptions["onAttempt"];
 	},
 ): Promise<XurlUserTweetsResponse> {
 	return runEffectPromise(listUserTweetsEffect(userId, options));
@@ -1354,6 +1386,7 @@ export function searchRecentByConversationIdEffect(
 		auth,
 		username,
 		signal,
+		onAttempt,
 	}: {
 		maxResults: number;
 		paginationToken?: string;
@@ -1361,6 +1394,7 @@ export function searchRecentByConversationIdEffect(
 		auth?: "oauth2";
 		username?: string;
 		signal?: AbortSignal;
+		onAttempt?: JsonCommandOptions["onAttempt"];
 	},
 ): Effect.Effect<XurlTweetsResponse, Error> {
 	const query = new URLSearchParams({
@@ -1381,9 +1415,9 @@ export function searchRecentByConversationIdEffect(
 			? runOAuth2JsonCommandEffect({
 					args,
 					username,
-					options: { timeoutMs, signal },
+					options: { timeoutMs, signal, onAttempt },
 				})
-			: runJsonCommandEffect(args, { timeoutMs, signal });
+			: runJsonCommandEffect(args, { timeoutMs, signal, onAttempt });
 	return command.pipe(Effect.map(toXurlTweetsResponse));
 }
 
@@ -1396,6 +1430,7 @@ export function searchRecentByConversationId(
 		auth?: "oauth2";
 		username?: string;
 		signal?: AbortSignal;
+		onAttempt?: JsonCommandOptions["onAttempt"];
 	},
 ): Promise<XurlTweetsResponse> {
 	return runEffectPromise(
