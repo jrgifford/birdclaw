@@ -57,6 +57,7 @@ import { fetchTweetMedia, formatMediaFetchResult } from "#/lib/media-fetch";
 import { syncMentionThreads } from "#/lib/mention-threads-live";
 import { exportMentionItems } from "#/lib/mentions-export";
 import {
+	exportMentionsViaCachedAuto,
 	exportMentionsViaCachedBird,
 	exportMentionsViaCachedXurl,
 	syncMentions,
@@ -1315,7 +1316,7 @@ mentionsCommand
 	.command("export [query]")
 	.description("Return mention tweets with plain-text and markdown renderings")
 	.option("--account <accountId>", "Account id")
-	.option("--mode <mode>", "birdclaw, xurl, or bird")
+	.option("--mode <mode>", "birdclaw, auto, xurl, or bird")
 	.option("--replied", "Only replied items")
 	.option("--unreplied", "Only unreplied items")
 	.option("--refresh", "Refresh the live xurl cache before returning")
@@ -1335,23 +1336,14 @@ mentionsCommand
 				: "all";
 		const limit = Number(options.limit);
 		const mode = resolveMentionsDataSource(options.mode);
-		if (mode === "xurl") {
-			const payload = await exportMentionsViaCachedXurl({
-				account: options.account,
-				search: query,
-				replyFilter,
-				limit,
-				all: Boolean(options.all) || options.maxPages !== undefined,
-				maxPages: options.maxPages ? Number(options.maxPages) : undefined,
-				refresh: Boolean(options.refresh),
-				cacheTtlMs: Number(options.cacheTtl) * 1000,
-			});
-			await autoSyncAfterWrite();
-			print(payload, true);
-			return;
-		}
-		if (mode === "bird") {
-			const payload = await exportMentionsViaCachedBird({
+		if (mode === "xurl" || mode === "bird" || mode === "auto") {
+			const exportFn =
+				mode === "xurl"
+					? exportMentionsViaCachedXurl
+					: mode === "bird"
+						? exportMentionsViaCachedBird
+						: exportMentionsViaCachedAuto;
+			const payload = await exportFn({
 				account: options.account,
 				search: query,
 				replyFilter,
@@ -1424,7 +1416,7 @@ syncCommand
 	.command("mentions")
 	.description("Refresh live mentions through xurl or bird")
 	.option("--account <accountId>", "Account id")
-	.option("--mode <mode>", "bird or xurl", "xurl")
+	.option("--mode <mode>", "auto, bird, or xurl", "auto")
 	.option("--limit <n>", "Result limit per page", "20")
 	.option("--max-pages <n>", "Stop after N pages")
 	.option("--since-id <id>", "Fetch mentions newer than this tweet id")

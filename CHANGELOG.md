@@ -12,6 +12,7 @@
 - Add a Network Map web view for current followers/following, with SQLite geocode caching, OpenCage refreshes, Mapbox rendering, and a local fallback map.
 - Render Network Map clusters as avatar stacks with relationship-weighted rings and avatar-rich profile/cluster overlays.
 - Make the Network Map people list follow the current viewport with an in-view search panel.
+- Add a Data Sources web view showing Birdclaw, bird, and xurl health, authenticated accounts, and automatic fallback order.
 - Prefetch cached avatars for Discuss hover citations so source previews avoid fallback initials once profile metadata includes an avatar URL.
 - Refresh Today digests from live `xurl` home timelines, mentions, and mention conversations before AI analysis so reports see more current context and reply parents.
 

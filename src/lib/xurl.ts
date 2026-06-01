@@ -4,6 +4,7 @@ import { Effect } from "effect";
 import { runEffectPromise } from "./effect-runtime";
 import type {
 	FollowDirection,
+	LiveDataSourceAccount,
 	TransportStatus,
 	XurlDmEventsResponse,
 	XurlFollowUsersResponse,
@@ -523,6 +524,24 @@ function readOAuth2UsernameCandidatesEffect(
 		Effect.map(({ stdout }) => parseOAuth2UsernamesFromStatus(stdout)),
 		Effect.catchAll(() => Effect.succeed([])),
 	);
+}
+
+export function readXurlOAuth2AccountsEffect(): Effect.Effect<
+	LiveDataSourceAccount[],
+	never
+> {
+	return readOAuth2UsernameCandidatesEffect().pipe(
+		Effect.map((candidates) =>
+			candidates.map((candidate) => ({
+				...(candidate.app ? { app: candidate.app } : {}),
+				...(candidate.username ? { username: candidate.username } : {}),
+			})),
+		),
+	);
+}
+
+export function readXurlOAuth2Accounts(): Promise<LiveDataSourceAccount[]> {
+	return runEffectPromise(readXurlOAuth2AccountsEffect());
 }
 
 function lookupOAuth2UsernameForAccountEffect(

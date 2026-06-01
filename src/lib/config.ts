@@ -17,7 +17,7 @@ export interface BirdclawPaths {
 	configPath: string;
 }
 
-export type MentionsDataSource = "birdclaw" | "xurl" | "bird";
+export type MentionsDataSource = "birdclaw" | "auto" | "xurl" | "bird";
 export type ActionsTransport = "auto" | "bird" | "xurl";
 
 export interface BirdclawConfig {
@@ -113,6 +113,7 @@ export function resolveMentionsDataSource(
 ): MentionsDataSource {
 	if (
 		requestedMode === "birdclaw" ||
+		requestedMode === "auto" ||
 		requestedMode === "xurl" ||
 		requestedMode === "bird"
 	) {
@@ -120,13 +121,19 @@ export function resolveMentionsDataSource(
 	}
 
 	const envMode = process.env.BIRDCLAW_MENTIONS_DATA_SOURCE?.trim();
-	if (envMode === "birdclaw" || envMode === "xurl" || envMode === "bird") {
+	if (
+		envMode === "birdclaw" ||
+		envMode === "auto" ||
+		envMode === "xurl" ||
+		envMode === "bird"
+	) {
 		return envMode;
 	}
 
 	const configMode = getBirdclawConfig().mentions?.dataSource;
 	if (
 		configMode === "birdclaw" ||
+		configMode === "auto" ||
 		configMode === "xurl" ||
 		configMode === "bird"
 	) {

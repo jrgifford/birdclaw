@@ -19,6 +19,7 @@ import { Route as LikesRouteImport } from './routes/likes'
 import { Route as InboxRouteImport } from './routes/inbox'
 import { Route as DmsRouteImport } from './routes/dms'
 import { Route as DiscussRouteImport } from './routes/discuss'
+import { Route as DataSourcesRouteImport } from './routes/data-sources'
 import { Route as BookmarksRouteImport } from './routes/bookmarks'
 import { Route as BlocksRouteImport } from './routes/blocks'
 import { Route as IndexRouteImport } from './routes/index'
@@ -35,6 +36,7 @@ import { Route as ApiNetworkMapRouteImport } from './routes/api/network-map'
 import { Route as ApiLinkPreviewRouteImport } from './routes/api/link-preview'
 import { Route as ApiLinkInsightsRouteImport } from './routes/api/link-insights'
 import { Route as ApiInboxRouteImport } from './routes/api/inbox'
+import { Route as ApiDataSourcesRouteImport } from './routes/api/data-sources'
 import { Route as ApiConversationRouteImport } from './routes/api/conversation'
 import { Route as ApiBlocksRouteImport } from './routes/api/blocks'
 import { Route as ApiAvatarRouteImport } from './routes/api/avatar'
@@ -88,6 +90,11 @@ const DmsRoute = DmsRouteImport.update({
 const DiscussRoute = DiscussRouteImport.update({
   id: '/discuss',
   path: '/discuss',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DataSourcesRoute = DataSourcesRouteImport.update({
+  id: '/data-sources',
+  path: '/data-sources',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BookmarksRoute = BookmarksRouteImport.update({
@@ -170,6 +177,11 @@ const ApiInboxRoute = ApiInboxRouteImport.update({
   path: '/api/inbox',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiDataSourcesRoute = ApiDataSourcesRouteImport.update({
+  id: '/api/data-sources',
+  path: '/api/data-sources',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiConversationRoute = ApiConversationRouteImport.update({
   id: '/api/conversation',
   path: '/api/conversation',
@@ -195,6 +207,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/blocks': typeof BlocksRoute
   '/bookmarks': typeof BookmarksRoute
+  '/data-sources': typeof DataSourcesRoute
   '/discuss': typeof DiscussRoute
   '/dms': typeof DmsRoute
   '/inbox': typeof InboxRoute
@@ -209,6 +222,7 @@ export interface FileRoutesByFullPath {
   '/api/avatar': typeof ApiAvatarRoute
   '/api/blocks': typeof ApiBlocksRoute
   '/api/conversation': typeof ApiConversationRoute
+  '/api/data-sources': typeof ApiDataSourcesRoute
   '/api/inbox': typeof ApiInboxRoute
   '/api/link-insights': typeof ApiLinkInsightsRoute
   '/api/link-preview': typeof ApiLinkPreviewRoute
@@ -227,6 +241,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/blocks': typeof BlocksRoute
   '/bookmarks': typeof BookmarksRoute
+  '/data-sources': typeof DataSourcesRoute
   '/discuss': typeof DiscussRoute
   '/dms': typeof DmsRoute
   '/inbox': typeof InboxRoute
@@ -241,6 +256,7 @@ export interface FileRoutesByTo {
   '/api/avatar': typeof ApiAvatarRoute
   '/api/blocks': typeof ApiBlocksRoute
   '/api/conversation': typeof ApiConversationRoute
+  '/api/data-sources': typeof ApiDataSourcesRoute
   '/api/inbox': typeof ApiInboxRoute
   '/api/link-insights': typeof ApiLinkInsightsRoute
   '/api/link-preview': typeof ApiLinkPreviewRoute
@@ -260,6 +276,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/blocks': typeof BlocksRoute
   '/bookmarks': typeof BookmarksRoute
+  '/data-sources': typeof DataSourcesRoute
   '/discuss': typeof DiscussRoute
   '/dms': typeof DmsRoute
   '/inbox': typeof InboxRoute
@@ -274,6 +291,7 @@ export interface FileRoutesById {
   '/api/avatar': typeof ApiAvatarRoute
   '/api/blocks': typeof ApiBlocksRoute
   '/api/conversation': typeof ApiConversationRoute
+  '/api/data-sources': typeof ApiDataSourcesRoute
   '/api/inbox': typeof ApiInboxRoute
   '/api/link-insights': typeof ApiLinkInsightsRoute
   '/api/link-preview': typeof ApiLinkPreviewRoute
@@ -294,6 +312,7 @@ export interface FileRouteTypes {
     | '/'
     | '/blocks'
     | '/bookmarks'
+    | '/data-sources'
     | '/discuss'
     | '/dms'
     | '/inbox'
@@ -308,6 +327,7 @@ export interface FileRouteTypes {
     | '/api/avatar'
     | '/api/blocks'
     | '/api/conversation'
+    | '/api/data-sources'
     | '/api/inbox'
     | '/api/link-insights'
     | '/api/link-preview'
@@ -326,6 +346,7 @@ export interface FileRouteTypes {
     | '/'
     | '/blocks'
     | '/bookmarks'
+    | '/data-sources'
     | '/discuss'
     | '/dms'
     | '/inbox'
@@ -340,6 +361,7 @@ export interface FileRouteTypes {
     | '/api/avatar'
     | '/api/blocks'
     | '/api/conversation'
+    | '/api/data-sources'
     | '/api/inbox'
     | '/api/link-insights'
     | '/api/link-preview'
@@ -358,6 +380,7 @@ export interface FileRouteTypes {
     | '/'
     | '/blocks'
     | '/bookmarks'
+    | '/data-sources'
     | '/discuss'
     | '/dms'
     | '/inbox'
@@ -372,6 +395,7 @@ export interface FileRouteTypes {
     | '/api/avatar'
     | '/api/blocks'
     | '/api/conversation'
+    | '/api/data-sources'
     | '/api/inbox'
     | '/api/link-insights'
     | '/api/link-preview'
@@ -391,6 +415,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   BlocksRoute: typeof BlocksRoute
   BookmarksRoute: typeof BookmarksRoute
+  DataSourcesRoute: typeof DataSourcesRoute
   DiscussRoute: typeof DiscussRoute
   DmsRoute: typeof DmsRoute
   InboxRoute: typeof InboxRoute
@@ -405,6 +430,7 @@ export interface RootRouteChildren {
   ApiAvatarRoute: typeof ApiAvatarRoute
   ApiBlocksRoute: typeof ApiBlocksRoute
   ApiConversationRoute: typeof ApiConversationRoute
+  ApiDataSourcesRoute: typeof ApiDataSourcesRoute
   ApiInboxRoute: typeof ApiInboxRoute
   ApiLinkInsightsRoute: typeof ApiLinkInsightsRoute
   ApiLinkPreviewRoute: typeof ApiLinkPreviewRoute
@@ -490,6 +516,13 @@ declare module '@tanstack/react-router' {
       path: '/discuss'
       fullPath: '/discuss'
       preLoaderRoute: typeof DiscussRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/data-sources': {
+      id: '/data-sources'
+      path: '/data-sources'
+      fullPath: '/data-sources'
+      preLoaderRoute: typeof DataSourcesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/bookmarks': {
@@ -604,6 +637,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiInboxRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/data-sources': {
+      id: '/api/data-sources'
+      path: '/api/data-sources'
+      fullPath: '/api/data-sources'
+      preLoaderRoute: typeof ApiDataSourcesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/conversation': {
       id: '/api/conversation'
       path: '/api/conversation'
@@ -639,6 +679,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   BlocksRoute: BlocksRoute,
   BookmarksRoute: BookmarksRoute,
+  DataSourcesRoute: DataSourcesRoute,
   DiscussRoute: DiscussRoute,
   DmsRoute: DmsRoute,
   InboxRoute: InboxRoute,
@@ -653,6 +694,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAvatarRoute: ApiAvatarRoute,
   ApiBlocksRoute: ApiBlocksRoute,
   ApiConversationRoute: ApiConversationRoute,
+  ApiDataSourcesRoute: ApiDataSourcesRoute,
   ApiInboxRoute: ApiInboxRoute,
   ApiLinkInsightsRoute: ApiLinkInsightsRoute,
   ApiLinkPreviewRoute: ApiLinkPreviewRoute,
