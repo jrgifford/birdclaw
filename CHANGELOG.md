@@ -1,10 +1,20 @@
 # CHANGELOG
 
-## 0.7.1 - Unreleased
+## 0.8.0 - 2026-06-10
 
 ### Added
 
 - Add localized Today/digest reports through `--language <locale-id>`, `BIRDCLAW_DIGEST_LANGUAGE`, and the period-digest API, with canonical locale validation and separate caches. (#47 - thanks @yujiawei)
+
+### Changed
+
+- Update runtime and development dependencies, align TanStack Start packages, and move pnpm's native build allowlist into workspace configuration.
+
+### Fixed
+
+- Add accurate archive-first Sign in and archive-request onboarding, including account-binding requirements, current xurl/bird setup, scoped transport selection, and clean autolink rendering. (#46 - thanks @peetzweg)
+- Respect `OPENAI_BASE_URL` when sending Today/digest requests to OpenAI-compatible API endpoints.
+- Anchor Link Insights' Today range to UTC midnight so it matches stored `created_at` timestamps across local time zones.
 
 ## 0.7.0 - 2026-06-01
 
@@ -28,7 +38,6 @@
 
 ### Fixed
 
-- Add accurate archive-first Sign in and archive-request onboarding, including account-binding requirements, current xurl/bird setup, scoped transport selection, and clean autolink rendering. (#46 - thanks @peetzweg)
 - Implement `birdclaw auth use <auto|bird|xurl>` so the documented command persists the preferred moderation action transport. (#45 - thanks @peetzweg)
 - Keep `birdclaw init` alive when the macOS Downloads scan is blocked, falling back to the other archive discovery paths. (#44 - thanks @peetzweg)
 - Show live Today fetch progress while Birdclaw pulls X home timeline, mentions, and reply context before the first AI tokens arrive.
