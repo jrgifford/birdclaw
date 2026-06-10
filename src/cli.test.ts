@@ -14,6 +14,7 @@ const addBlockMock = vi.fn();
 const recordBlockMock = vi.fn();
 const syncBlocksMock = vi.fn();
 const exportMentionItemsMock = vi.fn();
+const exportMentionsViaCachedAutoMock = vi.fn();
 const exportMentionsViaCachedBirdMock = vi.fn();
 const exportMentionsViaCachedXurlMock = vi.fn();
 const syncMentionsMock = vi.fn();
@@ -171,6 +172,8 @@ vi.mock("#/lib/mentions-export", () => ({
 }));
 
 vi.mock("#/lib/mentions-live", () => ({
+	exportMentionsViaCachedAuto: (...args: unknown[]) =>
+		exportMentionsViaCachedAutoMock(...args),
 	exportMentionsViaCachedBird: (...args: unknown[]) =>
 		exportMentionsViaCachedBirdMock(...args),
 	exportMentionsViaCachedXurl: (...args: unknown[]) =>
@@ -283,6 +286,7 @@ describe("cli", () => {
 		recordBlockMock.mockReset();
 		syncBlocksMock.mockReset();
 		exportMentionItemsMock.mockReset();
+		exportMentionsViaCachedAutoMock.mockReset();
 		exportMentionsViaCachedBirdMock.mockReset();
 		exportMentionsViaCachedXurlMock.mockReset();
 		syncMentionsMock.mockReset();
@@ -388,6 +392,11 @@ describe("cli", () => {
 		]);
 		exportMentionsViaCachedBirdMock.mockResolvedValue({
 			data: [{ id: "tweet_live_bird_1" }],
+			includes: { users: [{ id: "42", username: "sam", name: "Sam" }] },
+			meta: { result_count: 1 },
+		});
+		exportMentionsViaCachedAutoMock.mockResolvedValue({
+			data: [{ id: "tweet_live_auto_1" }],
 			includes: { users: [{ id: "42", username: "sam", name: "Sam" }] },
 			meta: { result_count: 1 },
 		});
@@ -1000,6 +1009,37 @@ describe("cli", () => {
 			refresh: true,
 			cacheTtlMs: 120000,
 		});
+		expect(exportMentionsViaCachedXurlMock).not.toHaveBeenCalled();
+	});
+
+	it("dispatches cached mention exports in auto mode", async () => {
+		const { runCli } = await loadCli();
+
+		await runCli([
+			"node",
+			"birdclaw",
+			"mentions",
+			"export",
+			"--mode",
+			"auto",
+			"--account",
+			"acct_primary",
+			"--refresh",
+			"--limit",
+			"8",
+		]);
+
+		expect(exportMentionsViaCachedAutoMock).toHaveBeenCalledWith({
+			account: "acct_primary",
+			search: undefined,
+			replyFilter: "all",
+			limit: 8,
+			all: false,
+			maxPages: undefined,
+			refresh: true,
+			cacheTtlMs: 120000,
+		});
+		expect(exportMentionsViaCachedBirdMock).not.toHaveBeenCalled();
 		expect(exportMentionsViaCachedXurlMock).not.toHaveBeenCalled();
 	});
 
@@ -2727,11 +2767,11 @@ describe("cli", () => {
 				question: "what changed?",
 				originalsOnly: true,
 				hideLowQuality: true,
-				mode: "auto",
+				mode: "xurl",
 				model: "gpt-5.5",
 				refresh: true,
 				limit: 25,
-				maxPages: 50,
+				maxPages: 200,
 			},
 			expect.objectContaining({ onDelta: expect.any(Function) }),
 		);
@@ -2740,10 +2780,10 @@ describe("cli", () => {
 			expect.objectContaining({
 				query: "sync",
 				source: "search",
-				mode: "auto",
+				mode: "xurl",
 				includeDms: false,
-				limit: 5000,
-				maxPages: 50,
+				limit: 20000,
+				maxPages: 200,
 			}),
 			expect.objectContaining({ onDelta: undefined }),
 		);

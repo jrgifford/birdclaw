@@ -401,6 +401,21 @@ birdclaw discuss "sync engine" --question "what changed over time?"
 birdclaw discuss "prototype" --include-dms --limit 500 --max-pages 5 --json
 ```
 
+### Profile analysis
+
+`birdclaw profile-analyze` resolves a profile through `xurl`, walks as much of the retrievable timeline as the API allows, backfills high-signal conversations, caches both the fetched context and AI result in SQLite, and writes a Markdown profile brief.
+
+Conversation backfill uses X recent search, so Birdclaw paces those calls by default (`BIRDCLAW_PROFILE_ANALYSIS_CONVERSATION_DELAY_MS`, default `3100`) and retries a 429 once after `BIRDCLAW_PROFILE_ANALYSIS_RATE_LIMIT_RETRY_MS` (default `60000`) before continuing with partial context. Set `BIRDCLAW_PROFILE_ANALYSIS_RATE_LIMIT_MAX_RETRIES` or the matching CLI flags when you want different behavior.
+
+When `xurl` has multiple OAuth2 labels, set `BIRDCLAW_XURL_OAUTH2_APP` and `BIRDCLAW_XURL_OAUTH2_USERNAME` to force the known-good token. Set `BIRDCLAW_PROFILE_ANALYSIS_ACCOUNT` to an account id or handle when profile backfills should use a non-default Birdclaw account.
+
+The web UI uses `/profiles/<handle>` for the canonical profile page, `/profile-analyze` for the analysis/search utility page, and `/rate-limits` for observed `xurl` pressure, recent 429s, and the active Profile Analyse throttle settings.
+
+```bash
+birdclaw profile-analyze steipete
+birdclaw profile-analyse openai --max-pages 20 --max-conversations 40 --conversation-delay-ms 3100 --rate-limit-retries 2 --json
+```
+
 ### What happened today
 
 `birdclaw today` streams a local "what happened" digest from the SQLite store. It uses the OpenAI Responses API with `gpt-5.5`, medium reasoning, and priority service tier by default. Set `OPENAI_API_KEY`; override with `BIRDCLAW_AI_MODEL`, `BIRDCLAW_OPENAI_REASONING_EFFORT`, or `BIRDCLAW_OPENAI_SERVICE_TIER` when needed.
