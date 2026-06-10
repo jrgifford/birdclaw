@@ -69,17 +69,22 @@ birdclaw db stats --json
 ## Optional: xurl
 
 ```text
+# macOS
 brew install --cask xdevplatform/tap/xurl
+
+# macOS or Linux
+npm install -g @xdevplatform/xurl
+
 xurl auth oauth2 --app my-app
 xurl whoami
 ```
 
-Register `my-app` through the [xurl authentication guide](https://github.com/xdevplatform/xurl#authentication), keeping the client secret out of shared shell history and process listings. The redirect URI configured in the X developer portal must match xurl's configured URI. Birdclaw shells out to xurl and does not own `~/.xurl`.
+Alternatively, use xurl's [no-sudo install script](https://github.com/xdevplatform/xurl#installation). Register `my-app` through the [xurl authentication guide](https://github.com/xdevplatform/xurl#authentication), keeping the client secret out of shared shell history and process listings. The redirect URI configured in the X developer portal must match xurl's configured URI. Birdclaw shells out to xurl and does not own `~/.xurl`.
 
 ## Optional: bird
 
 ```text
-brew install steipete/tap/bird
+npm install -g @steipete/bird
 bird whoami
 ```
 

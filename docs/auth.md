@@ -16,22 +16,27 @@ On a fresh Birdclaw database, import your X archive before the first live sync. 
 
 ## Set up xurl
 
-Install xurl, register an X developer app, then start OAuth2 authentication:
+Install xurl, register an X developer app, then start OAuth2 authentication. Homebrew is available on macOS; npm and the upstream install script work on macOS and Linux:
 
 ```text
+# macOS
 brew install --cask xdevplatform/tap/xurl
+
+# macOS or Linux
+npm install -g @xdevplatform/xurl
+
 xurl auth oauth2 --app my-app
 xurl whoami
 ```
 
-Register `my-app` first by following the [xurl authentication guide](https://github.com/xdevplatform/xurl#authentication). The redirect URI configured in the X developer portal must match xurl's configured URI. Treat the client secret as a secret; avoid entering it in shared shell history or exposing it in process listings.
+Alternatively, use xurl's [no-sudo install script](https://github.com/xdevplatform/xurl#installation). Register `my-app` first by following the [xurl authentication guide](https://github.com/xdevplatform/xurl#authentication). The redirect URI configured in the X developer portal must match xurl's configured URI. Treat the client secret as a secret; avoid entering it in shared shell history or exposing it in process listings.
 
 ## Set up bird
 
 Install bird, sign in to x.com in Safari, Chrome, or Firefox, then verify the detected account:
 
 ```text
-brew install steipete/tap/bird
+npm install -g @steipete/bird
 bird whoami
 ```
 
