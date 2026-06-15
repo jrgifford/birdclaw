@@ -1,7 +1,9 @@
 import { Check, ChevronDown } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchQueryEnvelope } from "#/lib/api-client";
+import { queryKeys } from "#/lib/query-client";
 import type { AccountRecord } from "#/lib/types";
 import { cx } from "#/lib/ui";
 import { AvatarChip } from "./AvatarChip";
@@ -25,28 +27,18 @@ function avatarName(account: AccountRecord) {
 }
 
 export function AccountSwitcher({ action }: { action?: ReactNode } = {}) {
-	const [accounts, setAccounts] = useState<AccountRecord[]>([]);
 	const [open, setOpen] = useState(false);
 	const switcherRef = useRef<HTMLDivElement>(null);
+	const statusQuery = useQuery({
+		queryKey: queryKeys.status,
+		queryFn: ({ signal }) => fetchQueryEnvelope({ signal }),
+	});
+	const accounts = statusQuery.data?.accounts ?? [];
 	const selectedAccountId = useSelectedAccountId(accounts);
 	const selectedAccount = useMemo(
 		() => accounts.find((account) => account.id === selectedAccountId),
 		[accounts, selectedAccountId],
 	);
-
-	useEffect(() => {
-		let active = true;
-		fetchQueryEnvelope()
-			.then((meta) => {
-				if (active) setAccounts(meta.accounts);
-			})
-			.catch(() => {
-				if (active) setAccounts([]);
-			});
-		return () => {
-			active = false;
-		};
-	}, []);
 
 	useEffect(() => {
 		if (!open) return;

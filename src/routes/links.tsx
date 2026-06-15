@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
 	ChevronDown,
 	ChevronUp,
@@ -9,7 +10,7 @@ import {
 	Search,
 	Users,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AvatarChip } from "#/components/AvatarChip";
 import {
 	FeedEmpty,
@@ -19,12 +20,8 @@ import {
 } from "#/components/FeedState";
 import { ProfilePreview } from "#/components/ProfilePreview";
 import { SmartTimestamp } from "#/components/SmartTimestamp";
-import {
-	loadClientCache,
-	readClientCache,
-	writeClientCache,
-} from "#/lib/client-cache";
 import { formatCompactNumber } from "#/lib/present";
+import { queryKeys } from "#/lib/query-client";
 import type {
 	LinkInsightItem,
 	LinkInsightKind,
@@ -61,9 +58,7 @@ const LINK_INSIGHTS_LIMIT = 30;
 const LINK_INSIGHTS_COMMENTS_LIMIT = 30;
 const PROFILE_HYDRATION_LIMIT = 30;
 const PROFILE_HYDRATION_DELAY_MS = 1200;
-const LINK_INSIGHTS_CACHE_PREFIX = "link-insights:";
 const LINK_INSIGHTS_CACHE_MAX_AGE_MS = 5 * 60_000;
-const LINK_PROFILE_HYDRATED_CACHE_PREFIX = "link-profile-hydrated:";
 const hydratingLinkProfileHandles = new Set<string>();
 
 const ranges: Array<{ value: LinkInsightRange; label: string }> = [
@@ -86,27 +81,13 @@ function itemSubtitle(item: LinkInsightItem) {
 	return item.displayUrl.split("?")[0] || item.displayUrl;
 }
 
-function insightCacheKey(
-	kind: LinkInsightKind,
-	range: LinkInsightRange,
-	sort: LinkInsightSort,
-	source: LinkInsightSource,
-	refreshTick: number,
-) {
-	return `${kind}:${range}:${sort}:${source}:${refreshTick}`;
-}
-
-function sharedInsightCacheKey(
+function linkInsightQueryKey(
 	kind: LinkInsightKind,
 	range: LinkInsightRange,
 	sort: LinkInsightSort,
 	source: LinkInsightSource,
 ) {
-	return `${LINK_INSIGHTS_CACHE_PREFIX}${kind}:${range}:${sort}:${source}`;
-}
-
-function hydratedProfileCacheKey(handle: string) {
-	return `${LINK_PROFILE_HYDRATED_CACHE_PREFIX}${handle.toLowerCase()}`;
+	return [...queryKeys.linkInsights, { kind, range, sort, source }] as const;
 }
 
 function linkInsightsUrl(
@@ -114,7 +95,6 @@ function linkInsightsUrl(
 	range: LinkInsightRange,
 	sort: LinkInsightSort,
 	source: LinkInsightSource,
-	refreshTick: number,
 ) {
 	const url = new URL("/api/link-insights", window.location.origin);
 	url.searchParams.set("kind", kind);
@@ -123,8 +103,24 @@ function linkInsightsUrl(
 	url.searchParams.set("source", source);
 	url.searchParams.set("limit", String(LINK_INSIGHTS_LIMIT));
 	url.searchParams.set("commentsLimit", String(LINK_INSIGHTS_COMMENTS_LIMIT));
-	url.searchParams.set("refresh", String(refreshTick));
 	return url;
+}
+
+async function fetchLinkInsights(
+	kind: LinkInsightKind,
+	range: LinkInsightRange,
+	sort: LinkInsightSort,
+	source: LinkInsightSource,
+	signal?: AbortSignal,
+) {
+	const response = await fetch(linkInsightsUrl(kind, range, sort, source), {
+		signal,
+	});
+	const data = (await response.json()) as LinkInsightResponse;
+	if (!response.ok) {
+		throw new Error("Link insights unavailable");
+	}
+	return data;
 }
 
 function mentionHref(mention: LinkInsightMention, item: LinkInsightItem) {
@@ -667,126 +663,52 @@ function LinkInsightRow({
 }
 
 function LinksRoute() {
+	const queryClient = useQueryClient();
 	const [kind, setKind] = useState<LinkInsightKind>("links");
 	const [range, setRange] = useState<LinkInsightRange>("week");
 	const [source, setSource] = useState<LinkInsightSource>("all");
 	const [sort, setSort] = useState<LinkInsightSort>("rank");
 	const [search, setSearch] = useState("");
-	const [refreshTick, setRefreshTick] = useState(0);
-	const initialCacheKey = insightCacheKey(kind, range, sort, source, 0);
-	const initialSharedData = readClientCache<LinkInsightResponse>(
-		sharedInsightCacheKey(kind, range, sort, source),
-		LINK_INSIGHTS_CACHE_MAX_AGE_MS,
-	);
-	const cacheRef = useRef(
-		new Map<string, LinkInsightResponse>(
-			initialSharedData ? [[initialCacheKey, initialSharedData]] : [],
-		),
-	);
-	const inFlightRef = useRef(new Set<string>());
-	const mountedRef = useRef(true);
-	const [errorByKey, setErrorByKey] = useState<Record<string, string>>({});
-	const [, bumpCacheVersion] = useState(0);
-	const currentCacheKey = insightCacheKey(
-		kind,
-		range,
-		sort,
-		source,
-		refreshTick,
-	);
-	const data = cacheRef.current.get(currentCacheKey) ?? null;
-	const error = errorByKey[currentCacheKey] ?? null;
-	const loading = !data && !error;
-
-	useEffect(() => {
-		return () => {
-			mountedRef.current = false;
-		};
-	}, []);
-
-	const fetchInsights = useCallback(
-		(fetchKind: LinkInsightKind) => {
-			const key = insightCacheKey(fetchKind, range, sort, source, refreshTick);
-			if (cacheRef.current.has(key) || inFlightRef.current.has(key)) {
-				return;
-			}
-			const sharedKey = sharedInsightCacheKey(fetchKind, range, sort, source);
-			if (refreshTick === 0) {
-				const cached = readClientCache<LinkInsightResponse>(
-					sharedKey,
-					LINK_INSIGHTS_CACHE_MAX_AGE_MS,
-				);
-				if (cached) {
-					cacheRef.current.set(key, cached);
-					bumpCacheVersion((value) => value + 1);
-					return;
-				}
-			}
-			inFlightRef.current.add(key);
-			setErrorByKey((current) => {
-				const rest = { ...current };
-				delete rest[key];
-				return rest;
-			});
-			loadClientCache(
-				sharedKey,
-				() =>
-					fetch(
-						linkInsightsUrl(fetchKind, range, sort, source, refreshTick),
-					).then((response) => response.json() as Promise<LinkInsightResponse>),
-				{
-					force: refreshTick > 0,
-					maxAgeMs: LINK_INSIGHTS_CACHE_MAX_AGE_MS,
-				},
-			)
-				.then((response: LinkInsightResponse) => {
-					cacheRef.current.set(key, response);
-					if (mountedRef.current) {
-						bumpCacheVersion((value) => value + 1);
-					}
-				})
-				.catch((error: unknown) => {
-					if (error instanceof DOMException && error.name === "AbortError") {
-						return;
-					}
-					if (!mountedRef.current) {
-						return;
-					}
-					console.warn("Link insights failed", error);
-					setErrorByKey((current) => ({
-						...current,
-						[key]:
-							error instanceof Error
-								? error.message
-								: "Link insights unavailable",
-					}));
-				})
-				.finally(() => {
-					inFlightRef.current.delete(key);
-				});
-		},
-		[range, refreshTick, sort, source],
-	);
-
-	useEffect(() => {
-		fetchInsights(kind);
-	}, [fetchInsights, kind]);
+	const insightsQuery = useQuery({
+		queryKey: linkInsightQueryKey(kind, range, sort, source),
+		queryFn: ({ signal }) =>
+			fetchLinkInsights(kind, range, sort, source, signal),
+		staleTime: LINK_INSIGHTS_CACHE_MAX_AGE_MS,
+	});
+	const data = insightsQuery.data ?? null;
+	const loading = insightsQuery.isPending;
+	const error = insightsQuery.error
+		? insightsQuery.error instanceof Error
+			? insightsQuery.error.message
+			: "Link insights unavailable"
+		: null;
 
 	useEffect(() => {
 		if (!data) {
 			return;
 		}
 		const prefetchKind = kind === "links" ? "videos" : "links";
-		const timer = window.setTimeout(() => fetchInsights(prefetchKind), 250);
+		const timer = window.setTimeout(() => {
+			void queryClient.prefetchQuery({
+				queryKey: linkInsightQueryKey(prefetchKind, range, sort, source),
+				queryFn: ({ signal }) =>
+					fetchLinkInsights(prefetchKind, range, sort, source, signal),
+				staleTime: LINK_INSIGHTS_CACHE_MAX_AGE_MS,
+			});
+		}, 250);
 		return () => window.clearTimeout(timer);
-	}, [data, fetchInsights, kind]);
+	}, [data, kind, queryClient, range, sort, source]);
 
 	useEffect(() => {
-		const handles = collectProfilesForHydration(data).filter(
-			(handle) =>
-				!readClientCache<boolean>(hydratedProfileCacheKey(handle)) &&
-				!hydratingLinkProfileHandles.has(handle.toLowerCase()),
-		);
+		const handles = collectProfilesForHydration(data).filter((handle) => {
+			const normalized = handle.toLowerCase();
+			return (
+				queryClient.getQueryData([
+					...queryKeys.profileHydration,
+					normalized,
+				]) !== true && !hydratingLinkProfileHandles.has(normalized)
+			);
+		});
 		if (handles.length === 0) {
 			return;
 		}
@@ -802,7 +724,10 @@ function LinksRoute() {
 				const normalized = handle.toLowerCase();
 				hydratingLinkProfileHandles.delete(normalized);
 				if (succeeded) {
-					writeClientCache(hydratedProfileCacheKey(normalized), true);
+					queryClient.setQueryData(
+						[...queryKeys.profileHydration, normalized],
+						true,
+					);
 				}
 			}
 		};
@@ -814,7 +739,9 @@ function LinksRoute() {
 				.then((response: { hydratedProfiles?: number }) => {
 					finishHydration(true);
 					if ((response.hydratedProfiles ?? 0) > 0) {
-						setRefreshTick((value) => value + 1);
+						void queryClient.invalidateQueries({
+							queryKey: queryKeys.linkInsights,
+						});
 					}
 				})
 				.catch((error: unknown) => {
@@ -841,7 +768,7 @@ function LinksRoute() {
 				window.cancelIdleCallback(idleId);
 			}
 		};
-	}, [data]);
+	}, [data, queryClient]);
 
 	const items = useMemo(() => {
 		const query = search.trim().toLowerCase();
@@ -966,7 +893,7 @@ function LinksRoute() {
 						action={
 							<button
 								className="rounded-full bg-[var(--accent)] px-4 py-1.5 text-[14px] font-bold text-white"
-								onClick={() => setRefreshTick((value) => value + 1)}
+								onClick={() => void insightsQuery.refetch()}
 								type="button"
 							>
 								Retry

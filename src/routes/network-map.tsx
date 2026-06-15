@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
 	Globe2,
 	MapPin,
@@ -22,7 +23,7 @@ import type { MapRef } from "react-map-gl/mapbox";
 import { useSelectedAccountId } from "#/components/account-selection";
 import { fetchQueryEnvelope } from "#/lib/api-client";
 import type { NetworkMapKind, NetworkMapResponse } from "#/lib/network-map";
-import type { QueryEnvelope } from "#/lib/types";
+import { queryKeys } from "#/lib/query-client";
 import {
 	cx,
 	errorCopyClass,
@@ -847,74 +848,39 @@ function VisibleProfilesPanel({
 }
 
 function NetworkMapRoute() {
+	const queryClient = useQueryClient();
 	const [type, setType] = useState<NetworkMapKind>("all");
-	const [meta, setMeta] = useState<QueryEnvelope | null>(null);
-	const [metaLoaded, setMetaLoaded] = useState(false);
-	const [data, setData] = useState<NetworkMapResponse | null>(null);
-	const [error, setError] = useState<string | null>(null);
-	const [loading, setLoading] = useState(true);
 	const [viewport, setViewport] = useState<MapViewport>(WORLD_VIEWPORT);
 	const [visibleSearch, setVisibleSearch] = useState("");
+	const statusQuery = useQuery({
+		queryKey: queryKeys.status,
+		queryFn: ({ signal }) => fetchQueryEnvelope({ signal }),
+	});
+	const meta = statusQuery.data ?? null;
 	const selectedAccountId = useSelectedAccountId(meta?.accounts);
-	const mapRequestIdRef = useRef(0);
-	const mapAbortControllerRef = useRef<AbortController | null>(null);
-
-	const load = useCallback(
-		(refresh = false) => {
-			const requestId = mapRequestIdRef.current + 1;
-			mapRequestIdRef.current = requestId;
-			mapAbortControllerRef.current?.abort();
-			const controller = new AbortController();
-			mapAbortControllerRef.current = controller;
-			setLoading(true);
-			setError(null);
-			fetchMap(type, refresh, selectedAccountId, controller.signal)
-				.then((nextData) => {
-					if (mapRequestIdRef.current !== requestId) return;
-					setData(nextData);
-				})
-				.catch((cause: unknown) => {
-					if (
-						controller.signal.aborted ||
-						mapRequestIdRef.current !== requestId
-					) {
-						return;
-					}
-					setError(cause instanceof Error ? cause.message : "Map unavailable");
-				})
-				.finally(() => {
-					if (mapRequestIdRef.current === requestId) {
-						setLoading(false);
-					}
-				});
+	const mapQueryKey = [
+		...queryKeys.networkMap,
+		{ type, selectedAccountId: selectedAccountId ?? null },
+	] as const;
+	const mapQuery = useQuery({
+		queryKey: mapQueryKey,
+		queryFn: ({ signal }) => fetchMap(type, false, selectedAccountId, signal),
+		staleTime: 5 * 60_000,
+	});
+	const refreshMutation = useMutation({
+		mutationFn: () => fetchMap(type, true, selectedAccountId),
+		onSuccess: (nextData) => {
+			queryClient.setQueryData(mapQueryKey, nextData);
 		},
-		[selectedAccountId, type],
-	);
-
-	useEffect(() => {
-		const controller = new AbortController();
-		fetchQueryEnvelope({ signal: controller.signal })
-			.then(setMeta)
-			.catch(() => {
-				// The map can still load against the default account if status is down.
-			})
-			.finally(() => {
-				if (!controller.signal.aborted) setMetaLoaded(true);
-			});
-		return () => controller.abort();
-	}, []);
-
-	useEffect(() => {
-		if (!metaLoaded) return;
-		load(false);
-	}, [load, metaLoaded]);
-
-	useEffect(
-		() => () => {
-			mapAbortControllerRef.current?.abort();
-		},
-		[],
-	);
+	});
+	const data = mapQuery.data ?? null;
+	const loading = mapQuery.isPending || refreshMutation.isPending;
+	const queryError = refreshMutation.error ?? mapQuery.error;
+	const error = queryError
+		? queryError instanceof Error
+			? queryError.message
+			: "Map unavailable"
+		: null;
 
 	const visibleFeatures = useMemo(
 		() =>
@@ -953,7 +919,7 @@ function NetworkMapRoute() {
 						<button
 							className={secondaryButtonClass}
 							type="button"
-							onClick={() => load(true)}
+							onClick={() => refreshMutation.mutate()}
 							disabled={loading}
 						>
 							<RefreshCw className={cx("size-4", loading && "animate-spin")} />

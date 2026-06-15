@@ -2,6 +2,10 @@
 
 ## 0.8.3 - Unreleased
 
+### Changed
+
+- Centralize SQLite writes and migrations, unify live-sync ingestion, and move retained web server state to TanStack Query for faster sidebar navigation and fewer duplicate reads.
+
 ## 0.8.2 - 2026-06-15
 
 ### Fixed

@@ -1,6 +1,3 @@
-import { afterEach } from "vitest";
-import { clearClientCache } from "#/lib/client-cache";
-
 process.env.BIRDCLAW_DISABLE_LIVE_WRITES ??= "1";
 
 export {};
@@ -46,7 +43,3 @@ if (typeof window !== "undefined") {
 }
 
 await import("@testing-library/jest-dom/vitest");
-
-afterEach(() => {
-	clearClientCache();
-});

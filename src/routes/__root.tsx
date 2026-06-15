@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { AppNav } from "#/components/AppNav";
+import { BirdclawQueryProvider } from "#/lib/query-client";
 import { ThemeProvider, themeScript } from "#/lib/theme";
 import {
 	bodyClass,
@@ -64,14 +65,16 @@ function RootDocument({ children }: { children: ReactNode }) {
 				<script suppressHydrationWarning>{themeScript}</script>
 			</head>
 			<body className={bodyClass}>
-				<ThemeProvider>
-					<div className={wideMode ? siteShellDmClass : siteShellClass}>
-						<AppNav compact={wideMode} />
-						<main className={wideMode ? mainColumnDmClass : mainColumnClass}>
-							{children}
-						</main>
-					</div>
-				</ThemeProvider>
+				<BirdclawQueryProvider>
+					<ThemeProvider>
+						<div className={wideMode ? siteShellDmClass : siteShellClass}>
+							<AppNav compact={wideMode} />
+							<main className={wideMode ? mainColumnDmClass : mainColumnClass}>
+								{children}
+							</main>
+						</div>
+					</ThemeProvider>
+				</BirdclawQueryProvider>
 				<Scripts />
 			</body>
 		</html>

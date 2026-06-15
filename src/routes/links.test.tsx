@@ -1,12 +1,7 @@
-import {
-	cleanup,
-	fireEvent,
-	render,
-	screen,
-	waitFor,
-} from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import type { ComponentType } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { renderWithQueryClient as render } from "#/test/render";
 import { Route } from "./links";
 
 const LinksRoute = Route.options.component as ComponentType;
@@ -175,7 +170,7 @@ describe("links route", () => {
 		});
 		vi.stubGlobal("fetch", fetchMock);
 
-		render(<LinksRoute />);
+		const { queryClient } = render(<LinksRoute />);
 
 		expect(await screen.findByText("Example story")).toBeInTheDocument();
 		const defaultCallsBeforeRemount = queryUrls.filter(
@@ -186,7 +181,7 @@ describe("links route", () => {
 				url.searchParams.get("sort") === "rank",
 		).length;
 		cleanup();
-		render(<LinksRoute />);
+		render(<LinksRoute />, { queryClient });
 
 		expect(screen.getByText("Example story")).toBeInTheDocument();
 		expect(
@@ -245,7 +240,6 @@ describe("links route", () => {
 	});
 
 	it("shows a retryable error when link insights fail", async () => {
-		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 		const fetchMock = vi.fn(async () => {
 			throw new Error("Insights unavailable");
 		});
@@ -259,9 +253,5 @@ describe("links route", () => {
 		await waitFor(() => {
 			expect(fetchMock).toHaveBeenCalledTimes(2);
 		});
-		expect(warnSpy).toHaveBeenCalledWith(
-			"Link insights failed",
-			expect.any(Error),
-		);
 	});
 });

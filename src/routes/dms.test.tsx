@@ -1,12 +1,7 @@
-import {
-	cleanup,
-	fireEvent,
-	render,
-	screen,
-	waitFor,
-} from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import type { ComponentType } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { renderWithQueryClient as render } from "#/test/render";
 
 vi.mock("#/components/DmWorkspace", () => ({
 	DmWorkspace: ({
@@ -416,6 +411,65 @@ describe("dms route", () => {
 		expect(await screen.findByText("New thread message")).toBeInTheDocument();
 	});
 
+	it("shows a retryable error when switching conversations fails", async () => {
+		const conversations = [
+			{
+				id: "dm_1",
+				title: "Sam Altman",
+				accountId: "acct_primary",
+				accountHandle: "@steipete",
+			},
+			{
+				id: "dm_2",
+				title: "Ada Lovelace",
+				accountId: "acct_primary",
+				accountHandle: "@steipete",
+			},
+		];
+		const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+			const url = String(input);
+			if (url.endsWith("/api/status")) {
+				return Response.json({
+					stats: { home: 3, mentions: 1, dms: 4, needsReply: 2, inbox: 3 },
+					transport: { statusText: "local" },
+					accounts: [],
+					archives: [],
+				});
+			}
+			if (url.includes("/api/query")) {
+				const conversationId = new URL(url).searchParams.get("conversationId");
+				if (conversationId === "dm_2") {
+					return Response.json(
+						{ message: "Conversation unavailable" },
+						{ status: 500 },
+					);
+				}
+				return Response.json({
+					resource: "dms",
+					items: conversations,
+					selectedConversation: {
+						conversation: conversations[0],
+						messages: [{ id: "message_dm_1", text: "Old thread message" }],
+					},
+				});
+			}
+			throw new Error(`Unexpected fetch ${url}`);
+		});
+		vi.stubGlobal("fetch", fetchMock);
+
+		render(<DmsRoute />);
+
+		expect(await screen.findByText("Old thread message")).toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "Ada Lovelace" }));
+
+		expect(
+			await screen.findByText("Could not load messages"),
+		).toBeInTheDocument();
+		expect(screen.getByText("Conversation unavailable")).toBeInTheDocument();
+		expect(screen.queryByText("Old thread message")).not.toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+	});
+
 	it("runs a live dm sync and reloads conversations", async () => {
 		const queryUrls: URL[] = [];
 		const syncBodies: unknown[] = [];
@@ -484,13 +538,17 @@ describe("dms route", () => {
 		render(<DmsRoute />);
 
 		expect(await screen.findByText("Sam Altman")).toBeInTheDocument();
+		await waitFor(() => {
+			expect(queryUrls.at(-1)?.searchParams.get("conversationId")).toBe("dm_1");
+		});
+		const initialQueryCount = queryUrls.length;
 		fireEvent.click(screen.getByRole("button", { name: "Sync DMs" }));
 
 		await waitFor(() => {
 			expect(syncBodies).toEqual([
 				{ kind: "dms", inbox: "all", limit: 50, maxPages: 1 },
 			]);
-			expect(queryUrls.at(-1)?.searchParams.get("refresh")).toBe("1");
+			expect(queryUrls.length).toBeGreaterThan(initialQueryCount);
 		});
 	});
 

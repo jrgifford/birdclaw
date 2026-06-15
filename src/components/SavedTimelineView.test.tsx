@@ -1,11 +1,6 @@
-import {
-	cleanup,
-	fireEvent,
-	render,
-	screen,
-	waitFor,
-} from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { renderWithQueryClient as render } from "#/test/render";
 import { SavedTimelineView } from "./SavedTimelineView";
 
 vi.mock("#/components/TimelineCard", () => ({
@@ -225,11 +220,12 @@ describe("SavedTimelineView", () => {
 		);
 
 		expect(await screen.findByText("fresh liked thing")).toBeInTheDocument();
+		const initialQueryCount = queryUrls.length;
 		fireEvent.click(screen.getByRole("button", { name: "Sync likes" }));
 
 		await waitFor(() => {
 			expect(syncBodies).toEqual([{ kind: "likes" }]);
-			expect(queryUrls.at(-1)?.searchParams.get("refresh")).toBe("1");
+			expect(queryUrls.length).toBeGreaterThan(initialQueryCount);
 		});
 	});
 
@@ -282,6 +278,7 @@ describe("SavedTimelineView", () => {
 		);
 
 		expect(await screen.findByText("reply target")).toBeInTheDocument();
+		const initialQueryCount = queryUrls.length;
 		fireEvent.click(screen.getByRole("button", { name: "reply bookmark_2" }));
 		expect(actionBodies).toEqual([]);
 
@@ -291,7 +288,7 @@ describe("SavedTimelineView", () => {
 			expect(actionBodies).toEqual([
 				expect.objectContaining({ tweetId: "bookmark_2", text: "Thanks" }),
 			]);
-			expect(queryUrls.at(-1)?.searchParams.get("refresh")).toBe("1");
+			expect(queryUrls.length).toBeGreaterThan(initialQueryCount);
 		});
 		expect(promptSpy).toHaveBeenCalledTimes(2);
 	});

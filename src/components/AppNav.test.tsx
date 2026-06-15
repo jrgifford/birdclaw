@@ -1,7 +1,8 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ThemeProvider } from "#/lib/theme";
+import { renderWithQueryClient as render } from "#/test/render";
 
 const routerState = vi.hoisted(() => ({ path: "/inbox" }));
 

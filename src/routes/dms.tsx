@@ -1,4 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
+import {
+	keepPreviousData,
+	useMutation,
+	useQuery,
+	useQueryClient,
+} from "@tanstack/react-query";
 import { Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { DmWorkspace } from "#/components/DmWorkspace";
@@ -6,16 +12,15 @@ import { FeedEmpty, FeedError, FeedLoading } from "#/components/FeedState";
 import { SyncNowButton } from "#/components/SyncNowButton";
 import { useSelectedAccountId } from "#/components/account-selection";
 import {
-	fetchCachedQueryResponse,
 	fetchQueryEnvelope,
-	invalidateCachedQueryResponses,
+	fetchQueryResponse,
 	postAction,
-	readCachedQueryResponse,
 } from "#/lib/api-client";
+import { queryKeys } from "#/lib/query-client";
 import type {
 	DmConversationItem,
 	DmMessageItem,
-	QueryEnvelope,
+	QueryResponse,
 	ReplyFilter,
 } from "#/lib/types";
 import { useDebouncedValue } from "#/components/useDebouncedValue";
@@ -65,12 +70,7 @@ const filterNumberFieldClass =
 	"flex h-[46px] shrink-0 items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-0 text-[14px] text-[var(--ink)] outline-none transition-colors duration-150 focus-within:border-[var(--accent)] focus-within:shadow-[0_0_0_1px_var(--accent)]";
 
 function DmsRoute() {
-	const [meta, setMeta] = useState<QueryEnvelope | null>(null);
-	const [items, setItems] = useState<DmConversationItem[]>([]);
-	const [messages, setMessages] = useState<DmMessageItem[]>([]);
-	const [loadedConversationId, setLoadedConversationId] = useState<
-		string | undefined
-	>();
+	const queryClient = useQueryClient();
 	const [selectedConversationId, setSelectedConversationId] = useState<
 		string | undefined
 	>();
@@ -81,204 +81,187 @@ function DmsRoute() {
 	const [sort, setSort] = useState<"recent" | "followers">("recent");
 	const [search, setSearch] = useState("");
 	const [replyDraft, setReplyDraft] = useState("");
-	const [refreshTick, setRefreshTick] = useState(0);
-	const [loading, setLoading] = useState(true);
-	const [error, setError] = useState<string | null>(null);
-	const [replyError, setReplyError] = useState<string | null>(null);
+	const statusQuery = useQuery({
+		queryKey: queryKeys.status,
+		queryFn: ({ signal }) => fetchQueryEnvelope({ signal }),
+	});
+	const meta = statusQuery.data ?? null;
 	const selectedAccountId = useSelectedAccountId(meta?.accounts);
 	const debouncedSearch = useDebouncedValue(search, 180);
-
-	async function loadStatus(force = false) {
-		setMeta(await fetchQueryEnvelope(undefined, { force }));
-	}
+	const dmsQueryKey = [
+		...queryKeys.dms,
+		{
+			inboxFilter,
+			replyFilter,
+			minFollowers,
+			minInfluenceScore,
+			sort,
+			search: debouncedSearch,
+			selectedAccountId: selectedAccountId ?? null,
+			selectedConversationId: selectedConversationId ?? null,
+		},
+	] as const;
+	const dmsQuery = useQuery({
+		queryKey: dmsQueryKey,
+		queryFn: ({ signal }) => {
+			const url = new URL("/api/query", window.location.origin);
+			url.searchParams.set("resource", "dms");
+			url.searchParams.set("inbox", inboxFilter);
+			url.searchParams.set("replyFilter", replyFilter);
+			url.searchParams.set("sort", sort);
+			if (minFollowers.trim()) {
+				url.searchParams.set("minFollowers", minFollowers.trim());
+			}
+			if (minInfluenceScore.trim()) {
+				url.searchParams.set("minInfluenceScore", minInfluenceScore.trim());
+			}
+			if (selectedAccountId && inboxFilter !== "requests") {
+				url.searchParams.set("account", selectedAccountId);
+			}
+			if (selectedConversationId) {
+				url.searchParams.set("conversationId", selectedConversationId);
+			}
+			if (debouncedSearch.trim()) {
+				url.searchParams.set("search", debouncedSearch.trim());
+			}
+			return fetchQueryResponse(url, { signal });
+		},
+		placeholderData: keepPreviousData,
+		staleTime: 5 * 60_000,
+	});
+	const items = (dmsQuery.data?.items ?? []) as DmConversationItem[];
+	const messages = dmsQuery.data?.selectedConversation?.messages ?? [];
+	const loadedConversationId =
+		dmsQuery.data?.selectedConversation?.conversation.id;
 
 	useEffect(() => {
-		void loadStatus();
-	}, []);
-
-	useEffect(() => {
-		const controller = new AbortController();
-		let active = true;
-		const url = new URL("/api/query", window.location.origin);
-		url.searchParams.set("resource", "dms");
-		url.searchParams.set("inbox", inboxFilter);
-		url.searchParams.set("replyFilter", replyFilter);
-		url.searchParams.set("refresh", String(refreshTick));
-		url.searchParams.set("sort", sort);
-		if (minFollowers.trim()) {
-			url.searchParams.set("minFollowers", minFollowers.trim());
-		}
-		if (minInfluenceScore.trim()) {
-			url.searchParams.set("minInfluenceScore", minInfluenceScore.trim());
-		}
-		if (selectedAccountId && inboxFilter !== "requests") {
-			url.searchParams.set("account", selectedAccountId);
-		}
-		if (selectedConversationId) {
-			url.searchParams.set("conversationId", selectedConversationId);
-		}
-		if (debouncedSearch.trim()) {
-			url.searchParams.set("search", debouncedSearch.trim());
-		}
-
-		const applyResponse = (
-			data: Awaited<ReturnType<typeof fetchCachedQueryResponse>>,
-		) => {
-			const conversations = data.items as DmConversationItem[];
-			const nextSelected =
-				data.selectedConversation?.conversation.id ?? conversations[0]?.id;
-			setLoadedConversationId(data.selectedConversation?.conversation.id);
-			setItems(conversations);
-			setSelectedConversationId((current) => {
-				if (!current) return nextSelected;
-				return conversations.some((conversation) => conversation.id === current)
-					? current
-					: nextSelected;
-			});
-			setMessages(data.selectedConversation?.messages ?? []);
-		};
-		setError(null);
-		const cached = readCachedQueryResponse(url);
-		if (cached) {
-			applyResponse(cached);
-			setLoading(false);
-			return () => {
-				active = false;
-				controller.abort();
-			};
-		}
-		setLoading(true);
-		fetchCachedQueryResponse(url, { signal: controller.signal })
-			.then((data) => {
-				if (!active) return;
-				applyResponse(data);
-			})
-			.catch((fetchError: unknown) => {
-				if (
-					fetchError instanceof DOMException &&
-					fetchError.name === "AbortError"
-				) {
-					return;
-				}
-				if (!active) return;
-				setError(
-					fetchError instanceof Error
-						? fetchError.message
-						: "Messages unavailable",
-				);
-				setItems([]);
-				setMessages([]);
-				setLoadedConversationId(undefined);
-			})
-			.finally(() => {
-				if (active) {
-					setLoading(false);
-				}
-			});
-
-		return () => {
-			active = false;
-			controller.abort();
-		};
-	}, [
-		minFollowers,
-		minInfluenceScore,
-		inboxFilter,
-		refreshTick,
-		replyFilter,
-		debouncedSearch,
-		selectedConversationId,
-		selectedAccountId,
-		sort,
-	]);
+		if (!dmsQuery.data) return;
+		const nextSelected = loadedConversationId ?? items[0]?.id;
+		setSelectedConversationId((current) => {
+			if (!current) return nextSelected;
+			return items.some((conversation) => conversation.id === current)
+				? current
+				: nextSelected;
+		});
+	}, [dmsQuery.data, items, loadedConversationId]);
 
 	const selectedConversation =
 		items.find((item) => item.id === selectedConversationId) ?? null;
-	const switchingConversation =
-		loading &&
-		Boolean(
-			selectedConversationId &&
-			loadedConversationId &&
-			selectedConversationId !== loadedConversationId,
-		);
+	const switchingConversation = Boolean(
+		!dmsQuery.isError &&
+		selectedConversationId &&
+		loadedConversationId &&
+		selectedConversationId !== loadedConversationId,
+	);
 
 	const subtitle = useMemo(() => {
 		if (!meta) return "Loading direct messages...";
 		return `${String(meta.stats.dms)} conversations cached locally`;
 	}, [meta]);
+	const replyMutation = useMutation({
+		mutationFn: ({
+			conversationId,
+			text,
+		}: {
+			conversationId: string;
+			text: string;
+		}) => postAction({ kind: "replyDm", conversationId, text }),
+		onMutate: async ({ conversationId, text }) => {
+			await queryClient.cancelQueries({ queryKey: dmsQueryKey });
+			const previous = queryClient.getQueryData<QueryResponse>(dmsQueryKey);
+			if (!previous || !selectedConversation) return { previous };
+			const now = new Date().toISOString();
+			const accountRecord = meta?.accounts.find(
+				(account) => account.id === selectedConversation.accountId,
+			);
+			const senderHandle = (
+				accountRecord?.handle ?? selectedConversation.accountHandle
+			).replace(/^@/, "");
+			const optimisticMessage: DmMessageItem = {
+				id: `optimistic-${now}`,
+				conversationId,
+				text,
+				createdAt: now,
+				direction: "outbound",
+				isReplied: true,
+				mediaCount: 0,
+				sender: {
+					id: `local-${selectedConversation.accountId}`,
+					handle: senderHandle,
+					displayName: accountRecord?.name ?? senderHandle,
+					bio: "",
+					followersCount: 0,
+					avatarHue: 18,
+					createdAt: now,
+				},
+			};
+			const previousItems = previous.items as DmConversationItem[];
+			queryClient.setQueryData<QueryResponse>(dmsQueryKey, {
+				...previous,
+				items: previousItems.map((item) =>
+					item.id === conversationId
+						? {
+								...item,
+								lastMessageAt: now,
+								lastMessagePreview: text,
+								needsReply: false,
+								unreadCount: 0,
+							}
+						: item,
+				),
+				selectedConversation: previous.selectedConversation
+					? {
+							...previous.selectedConversation,
+							messages: [
+								...previous.selectedConversation.messages,
+								optimisticMessage,
+							],
+						}
+					: previous.selectedConversation,
+			});
+			return { previous };
+		},
+		onError: (_error, _variables, context) => {
+			if (context?.previous) {
+				queryClient.setQueryData(dmsQueryKey, context.previous);
+			}
+		},
+		onSettled: () =>
+			Promise.all([
+				queryClient.invalidateQueries({ queryKey: queryKeys.dms }),
+				queryClient.invalidateQueries({ queryKey: queryKeys.status }),
+			]),
+	});
 
 	async function replyToConversation(conversationId: string) {
 		const text = replyDraft.trim();
 		if (!text || !selectedConversation) return;
-
-		const now = new Date().toISOString();
-		const accountRecord = meta?.accounts.find(
-			(account) => account.id === selectedConversation.accountId,
-		);
-		const senderHandle = (
-			accountRecord?.handle ?? selectedConversation.accountHandle
-		).replace(/^@/, "");
-		const optimisticMessage: DmMessageItem = {
-			id: `optimistic-${now}`,
-			conversationId,
-			text,
-			createdAt: now,
-			direction: "outbound",
-			isReplied: true,
-			mediaCount: 0,
-			sender: {
-				id: `local-${selectedConversation.accountId}`,
-				handle: senderHandle,
-				displayName: accountRecord?.name ?? senderHandle,
-				bio: "",
-				followersCount: 0,
-				avatarHue: 18,
-				createdAt: now,
-			},
-		};
-		const previousMessages = messages;
-		const previousItems = items;
-
-		setReplyError(null);
 		setReplyDraft("");
-		setMessages((current) => [...current, optimisticMessage]);
-		setItems((current) =>
-			current.map((item) =>
-				item.id === conversationId
-					? {
-							...item,
-							lastMessageAt: now,
-							lastMessagePreview: text,
-							needsReply: false,
-							unreadCount: 0,
-						}
-					: item,
-			),
-		);
-
 		try {
-			await postAction({
-				kind: "replyDm",
-				conversationId,
-				text,
-			});
-
-			invalidateCachedQueryResponses();
+			await replyMutation.mutateAsync({ conversationId, text });
 			setSelectedConversationId(conversationId);
-			setRefreshTick((value) => value + 1);
-		} catch (error) {
+		} catch {
 			setReplyDraft(text);
-			setMessages(previousMessages);
-			setItems(previousItems);
-			setReplyError(error instanceof Error ? error.message : "Reply failed");
 		}
 	}
 
 	function refreshLocalView() {
-		invalidateCachedQueryResponses();
-		setRefreshTick((value) => value + 1);
-		void loadStatus(true);
+		void Promise.all([
+			queryClient.invalidateQueries({ queryKey: queryKeys.dms }),
+			queryClient.invalidateQueries({ queryKey: queryKeys.status }),
+		]);
 	}
+	const loading = dmsQuery.isPending;
+	const error = dmsQuery.error
+		? dmsQuery.error instanceof Error
+			? dmsQuery.error.message
+			: "Messages unavailable"
+		: null;
+	const replyError = replyMutation.error
+		? replyMutation.error instanceof Error
+			? replyMutation.error.message
+			: "Reply failed"
+		: null;
 
 	return (
 		<>
@@ -392,7 +375,7 @@ function DmsRoute() {
 				</p>
 			) : null}
 
-			{loading && (items.length === 0 || switchingConversation) ? (
+			{(loading && items.length === 0) || switchingConversation ? (
 				<FeedLoading
 					detail="Reading local conversations and reply state"
 					label="Loading messages"
@@ -402,7 +385,7 @@ function DmsRoute() {
 					action={
 						<button
 							className="rounded-full bg-[var(--accent)] px-4 py-1.5 text-[14px] font-bold text-white"
-							onClick={() => setRefreshTick((value) => value + 1)}
+							onClick={() => void dmsQuery.refetch()}
 							type="button"
 						>
 							Retry
