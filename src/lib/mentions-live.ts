@@ -1,13 +1,10 @@
 import type { Database } from "./sqlite";
 import { Effect } from "effect";
-import {
-	getAuthenticatedBirdAccountEffect,
-	listMentionsViaBirdEffect,
-} from "./bird";
 import type { MentionsDataSource } from "./config";
 import { databaseWriteEffect } from "./database-writer";
 import { getNativeDb } from "./db";
-import { runEffectPromise, tryPromise } from "./effect-runtime";
+import { runEffectPromise } from "./effect-runtime";
+import { liveTransportGateway } from "./live-transport-gateway";
 import {
 	assertLiveAccountMatches,
 	resolveLiveSyncAccount,
@@ -24,7 +21,6 @@ import type {
 	XurlMentionUser,
 } from "./types";
 import { ingestTweetPayload } from "./tweet-repository";
-import { listMentionsViaXurl, lookupUsersByHandles } from "./xurl";
 
 export const DEFAULT_MENTIONS_CACHE_TTL_MS = 2 * 60_000;
 const MIN_XURL_MENTIONS_LIMIT = 5;
@@ -435,7 +431,8 @@ function writeMentionHighWaterId(
 
 function verifyBirdAccountMatchesEffect(account: LiveSyncAccount) {
 	return Effect.gen(function* () {
-		const authenticated = yield* getAuthenticatedBirdAccountEffect();
+		const authenticated =
+			yield* liveTransportGateway.bird.getAuthenticatedAccount();
 		return yield* Effect.try({
 			try: () =>
 				assertLiveAccountMatches({
@@ -600,9 +597,9 @@ function fetchMentionsViaXurlEffect({
 	return Effect.gen(function* () {
 		const accountUserId =
 			resolvedAccount.externalUserId ??
-			(yield* tryPromise(() =>
-				lookupUsersByHandles([resolvedAccount.username]),
-			).pipe(Effect.map((users) => users[0]?.id)));
+			(yield* liveTransportGateway.xurl
+				.lookupUsersByHandles([resolvedAccount.username])
+				.pipe(Effect.map((users) => users[0]?.id)));
 		if (!accountUserId) {
 			return yield* Effect.fail(
 				new Error(
@@ -615,16 +612,14 @@ function fetchMentionsViaXurlEffect({
 		let nextToken: string | undefined = startPaginationToken;
 		let pageCount = 0;
 		do {
-			const payload = yield* tryPromise(() =>
-				listMentionsViaXurl({
-					maxResults: limit,
-					username: resolvedAccount.username,
-					userId: String(accountUserId),
-					paginationToken: nextToken,
-					...(sinceId ? { sinceId } : {}),
-					...(startTime ? { startTime } : {}),
-				}),
-			);
+			const payload = yield* liveTransportGateway.xurl.listMentions({
+				maxResults: limit,
+				username: resolvedAccount.username,
+				userId: String(accountUserId),
+				paginationToken: nextToken,
+				...(sinceId ? { sinceId } : {}),
+				...(startTime ? { startTime } : {}),
+			});
 			pages.push(payload);
 			const metaNextToken =
 				typeof payload.meta?.next_token === "string"
@@ -659,7 +654,7 @@ function fetchMentionsViaXurlEffect({
 }
 
 function fetchMentionsViaBirdEffect({ limit }: { limit: number }) {
-	return listMentionsViaBirdEffect({ maxResults: limit });
+	return liveTransportGateway.bird.listMentions({ maxResults: limit });
 }
 
 function isMaxPagesPartial({

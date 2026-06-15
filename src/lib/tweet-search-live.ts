@@ -1,8 +1,8 @@
 import { Effect } from "effect";
-import { searchTweetsViaBirdEffect } from "./bird";
 import type { Database } from "./sqlite";
 import { getNativeDb } from "./db";
 import { runEffectPromise } from "./effect-runtime";
+import { liveTransportGateway } from "./live-transport-gateway";
 import {
 	normalizeCacheTtlMs,
 	resolveLiveSyncAccount,
@@ -10,7 +10,6 @@ import {
 } from "./live-sync-engine";
 import type { XurlMentionsResponse, XurlTweetsResponse } from "./types";
 import { ingestTweetPayload } from "./tweet-repository";
-import { searchRecentTweetsEffect } from "./xurl";
 
 export type TweetSearchMode = "auto" | "bird" | "xurl" | "local";
 
@@ -192,7 +191,7 @@ function fetchBirdSearchEffect({
 	limit: number;
 	maxPages: number;
 }) {
-	return searchTweetsViaBirdEffect(query, {
+	return liveTransportGateway.bird.searchTweets(query, {
 		maxResults: Math.min(limit, XURL_PAGE_SIZE),
 		all: maxPages > 1 || limit > XURL_PAGE_SIZE,
 		maxPages,
@@ -222,13 +221,16 @@ function fetchXurlSearchEffect({
 				limit -
 				responses.reduce((total, response) => total + response.data.length, 0);
 			if (remaining <= 0) break;
-			const response = yield* searchRecentTweetsEffect(query, {
-				maxResults: Math.max(10, Math.min(XURL_PAGE_SIZE, remaining)),
-				paginationToken: nextToken,
-				startTime: since,
-				endTime: until,
-				timeoutMs,
-			});
+			const response = yield* liveTransportGateway.xurl.searchRecentTweets(
+				query,
+				{
+					maxResults: Math.max(10, Math.min(XURL_PAGE_SIZE, remaining)),
+					paginationToken: nextToken,
+					startTime: since,
+					endTime: until,
+					timeoutMs,
+				},
+			);
 			responses.push(toMentionsResponse(response));
 			nextToken =
 				typeof response.meta?.next_token === "string"

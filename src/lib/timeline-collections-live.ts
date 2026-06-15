@@ -1,11 +1,8 @@
 import type { Database } from "./sqlite";
 import { Effect } from "effect";
-import {
-	listBookmarkedTweetsViaBirdEffect,
-	listLikedTweetsViaBirdEffect,
-} from "./bird";
 import { getNativeDb } from "./db";
-import { runEffectPromise, tryPromise } from "./effect-runtime";
+import { runEffectPromise } from "./effect-runtime";
+import { liveTransportGateway } from "./live-transport-gateway";
 import {
 	createLiveTransportAdapter,
 	normalizeCacheTtlMs,
@@ -19,11 +16,6 @@ import type {
 	XurlMentionUser,
 } from "./types";
 import { ingestTweetPayload } from "./tweet-repository";
-import {
-	listBookmarkedTweetsViaXurl,
-	listLikedTweetsViaXurl,
-	lookupUsersByHandles,
-} from "./xurl";
 
 export type TimelineCollectionKind = "likes" | "bookmarks";
 export type TimelineCollectionMode = "auto" | "xurl" | "bird";
@@ -218,9 +210,8 @@ function fetchXurlCollectionEffect({
 	return Effect.gen(function* () {
 		let resolvedUserId = userId;
 		if (!resolvedUserId) {
-			const [accountUser] = yield* tryPromise(() =>
-				lookupUsersByHandles([username]),
-			);
+			const [accountUser] =
+				yield* liveTransportGateway.xurl.lookupUsersByHandles([username]);
 			if (!accountUser?.id) {
 				return yield* Effect.fail(
 					new Error(`Could not resolve Twitter user id for @${username}`),
@@ -234,22 +225,20 @@ function fetchXurlCollectionEffect({
 		let pageCount = 0;
 		let saturatedAtPage: number | undefined;
 		do {
-			const payload = yield* tryPromise(() =>
-				kind === "likes"
-					? listLikedTweetsViaXurl({
-							maxResults: limit,
-							username,
-							userId: resolvedUserId,
-							paginationToken: nextToken,
-						})
-					: listBookmarkedTweetsViaXurl({
-							maxResults: limit,
-							username,
-							userId: resolvedUserId,
-							isPaginatedWalk: all,
-							paginationToken: nextToken,
-						}),
-			);
+			const payload = yield* kind === "likes"
+				? liveTransportGateway.xurl.listLikes({
+						maxResults: limit,
+						username,
+						userId: resolvedUserId,
+						paginationToken: nextToken,
+					})
+				: liveTransportGateway.xurl.listBookmarks({
+						maxResults: limit,
+						username,
+						userId: resolvedUserId,
+						isPaginatedWalk: all,
+						paginationToken: nextToken,
+					});
 			pageCount += 1;
 			if (earlyStop) {
 				const tweetIds = payload.data.map((tweet) => tweet.id);
@@ -304,12 +293,12 @@ function fetchBirdCollectionEffect({
 	maxPages: number | null;
 }) {
 	return kind === "likes"
-		? listLikedTweetsViaBirdEffect({
+		? liveTransportGateway.bird.listLikes({
 				maxResults: limit,
 				all,
 				maxPages: maxPages ?? undefined,
 			})
-		: listBookmarkedTweetsViaBirdEffect({
+		: liveTransportGateway.bird.listBookmarks({
 				maxResults: limit,
 				all,
 				maxPages: maxPages ?? undefined,
