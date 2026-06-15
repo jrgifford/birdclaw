@@ -1,5 +1,7 @@
 # CHANGELOG
 
+## 0.8.4 - Unreleased
+
 ## 0.8.3 - 2026-06-15
 
 ### Changed
